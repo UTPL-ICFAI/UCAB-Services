@@ -1,0 +1,188 @@
+require("dotenv").config();
+const express    = require("express");
+const http       = require("http");
+const { Server } = require("socket.io");
+const mongoose   = require("mongoose");
+const cors       = require("cors");
+const jwt        = require("jsonwebtoken");
+
+const Ride       = require("./models/Ride");
+const Captain    = require("./models/Captain");
+const authRoutes = require("./routes/auth");
+
+const app    = express();
+const server = http.createServer(app);
+const io     = new Server(server, { cors: { origin: "*" } }); 
+const PORT       = process.env.PORT || 5000;
+const MONGO_URI  = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/bolacabs";
+const JWT_SECRET = process.env.JWT_SECRET || "bolacabs_secret_2026";
+
+// ── Middleware ───────────────────────────────────────────────
+app.use(cors());
+app.use(express.json());
+
+// ── REST routes ──────────────────────────────────────────────
+app.use("/api/auth", authRoutes);
+app.get("/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
+
+// ── MongoDB ──────────────────────────────────────────────────
+mongoose
+    .connect(MONGO_URI)
+    .then(() => console.log("✅ MongoDB connected"))
+    .catch((err) => console.error("❌ Mongo error:", err));
+
+// ── Socket.io ────────────────────────────────────────────────
+// Track captain sockets: captainId → { socketId, vehicleType, name }
+const captainSockets = new Map();
+
+io.on("connection", (socket) => {
+    console.log("🔌 connected:", socket.id);
+
+    // ── Captain comes online after login ────────────────────
+    socket.on("captain online", async ({ token }) => {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            if (decoded.role !== "captain") return;
+
+            const captain = await Captain.findByIdAndUpdate(
+                decoded.id,
+                { socketId: socket.id, isOnline: true },
+                { new: true }
+            );
+            if (!captain) return;
+
+            // Join vehicle-type room so ride requests are filtered correctly
+            socket.join(captain.vehicle.type);
+            captainSockets.set(decoded.id, {
+                socketId: socket.id,
+                vehicleType: captain.vehicle.type,
+                name: captain.name
+            });
+
+            // Send full profile back to captain's device
+            socket.emit("captain profile", {
+                _id: captain._id,
+                name: captain.name,
+                phone: captain.phone,
+                vehicle: captain.vehicle,
+                rating: captain.rating,
+                earnings: captain.earnings,
+                totalRides: captain.totalRides
+            });
+            console.log(`🚗 Captain ${captain.name} [${captain.vehicle.type}] online`);
+        } catch (e) {
+            console.error("captain online error:", e.message);
+        }
+    });
+
+    // ── User requests a ride ─────────────────────────────────
+    socket.on("new ride request", async (data) => {
+        try {
+            const ride = await Ride.create({
+                pickup:        data.pickup,
+                dropoff:       data.dropoff,
+                fare:          data.fare,
+                rideType:      data.rideType || "go",
+                paymentMethod: data.paymentMethod || "cash",
+                scheduledAt:   data.scheduledAt || null,
+                status:        "requested"
+            });
+
+            // Only captains with matching vehicle type receive notification
+            io.to(data.rideType || "go").emit("new ride", {
+                rideId:        ride._id.toString(),
+                pickup:        ride.pickup,
+                dropoff:       ride.dropoff,
+                fare:          ride.fare,
+                rideType:      ride.rideType,
+                paymentMethod: ride.paymentMethod,
+                scheduledAt:   ride.scheduledAt
+            });
+            console.log(`📍 Ride ${ride._id} → room [${data.rideType}]`);
+        } catch (err) {
+            console.error("new ride request error:", err);
+        }
+    });
+
+    // ── Captain accepts ride — single-accept lock ────────────
+    socket.on("accept ride", async ({ rideId, captainId, captainName }) => {
+        try {
+            const ride = await Ride.findOneAndUpdate(
+                { _id: rideId, status: "requested" },
+                { status: "accepted", captainSocketId: socket.id },
+                { new: true }
+            );
+
+            if (!ride) {
+                socket.emit("ride already taken");
+                return;
+            }
+
+            // Broadcast to everyone: rider gets captain details, other captains remove card
+            const captainProfile = await Captain.findOne({ socketId: socket.id })
+                .select("name rating totalRides vehicle");
+
+            io.emit("ride accepted", {
+                rideId:          ride._id.toString(),
+                captainName:     captainName || captainProfile?.name || "Your Captain",
+                captainSocketId: socket.id,
+                captain: captainProfile ? {
+                    name:       captainProfile.name,
+                    rating:     captainProfile.rating,
+                    totalRides: captainProfile.totalRides,
+                    vehicle:    captainProfile.vehicle
+                } : null
+            });
+            console.log(`✅ Ride ${rideId} accepted by ${captainName}`);
+        } catch (err) {
+            console.error("accept ride error:", err);
+        }
+    });
+
+    // ── Captain completes ride ───────────────────────────────
+    socket.on("complete ride", async ({ rideId, captainId, fare }) => {
+        try {
+            await Ride.findByIdAndUpdate(rideId, { status: "completed" });
+
+            if (captainId) {
+                const updated = await Captain.findByIdAndUpdate(
+                    captainId,
+                    { $inc: { earnings: fare || 0, totalRides: 1 } },
+                    { new: true }
+                );
+                // Push updated stats back to the captain
+                socket.emit("stats updated", {
+                    earnings:   updated.earnings,
+                    totalRides: updated.totalRides
+                });
+            }
+
+            io.emit("ride completed", { rideId });
+            console.log(`🏁 Ride ${rideId} completed`);
+        } catch (err) {
+            console.error("complete ride error:", err);
+        }
+    });
+
+    // ── Disconnect ───────────────────────────────────────────
+    socket.on("disconnect", async () => {
+        console.log("❌ disconnected:", socket.id);
+        try {
+            await Captain.findOneAndUpdate(
+                { socketId: socket.id },
+                { isOnline: false, socketId: null }
+            );
+            for (const [id, info] of captainSockets.entries()) {
+                if (info.socketId === socket.id) {
+                    captainSockets.delete(id);
+                    break;
+                }
+            }
+        } catch (_) {}
+    });
+});
+
+// ── Start — bind to 0.0.0.0 so LAN devices can connect ──────
+server.listen(PORT, "0.0.0.0", () => {
+    console.log(`🚀 Bola-cabs server → http://0.0.0.0:${PORT}`);
+});
