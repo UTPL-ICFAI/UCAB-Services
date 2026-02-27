@@ -17,13 +17,25 @@ const fleetRoutes = require("./fleet/fleet.routes");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+
+// socket.io server
+const io = new Server(server, {
+    cors: {
+        origin: ["http://localhost:3000", "https://your-frontend.vercel.app"],
+        credentials: true
+    }
+});
+
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/bolacabs";
 const JWT_SECRET = process.env.JWT_SECRET || "bolacabs_secret_2026";
 
+
 // ── Middleware ───────────────────────────────────────────────
-app.use(cors());
+app.use(cors({
+    origin: ["http://localhost:3000", "https://your-frontend.vercel.app"],
+    credentials: true
+}));
 app.use(express.json());
 
 // ── REST routes ──────────────────────────────────────────────
