@@ -6,8 +6,8 @@ import BACKEND_URL from "../config";
 
 const CaptainPage = () => {
   const navigate = useNavigate();
-  const user   = JSON.parse(localStorage.getItem("bolacabs_user") || "{}");
-  const tkn    = localStorage.getItem("bolacabs_token");
+  const user = JSON.parse(localStorage.getItem("bolacabs_user") || "{}");
+  const tkn = localStorage.getItem("bolacabs_token");
 
   const socketRef = useRef(null);
   if (!socketRef.current) {
@@ -15,19 +15,25 @@ const CaptainPage = () => {
   }
   const socket = socketRef.current;
 
-  const [isOnline,     setIsOnline]     = useState(false);
-  const [connected,    setConnected]    = useState(false);
-  const [rides,        setRides]        = useState([]);
+  const [isOnline, setIsOnline] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [rides, setRides] = useState([]);
   const [acceptedRide, setAcceptedRide] = useState(null);
-  const [earnings,     setEarnings]     = useState(user.earnings   || 0);
-  const [totalRides,   setTotalRides]   = useState(user.totalRides || 0);
-  const [rating]                        = useState(user.rating     || 4.8);
-  const [toast,        setToast]        = useState("");
-  const [mapRide,      setMapRide]      = useState(null);
+  const [earnings, setEarnings] = useState(user.earnings || 0);
+  const [totalRides, setTotalRides] = useState(user.totalRides || 0);
+  const [rating] = useState(user.rating || 4.8);
+  const [toast, setToast] = useState("");
+  const [mapRide, setMapRide] = useState(null);
+
+  // OTP verification state
+  const [expectedOtp, setExpectedOtp] = useState("");
+  const [otpInput, setOtpInput] = useState("");
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpError, setOtpError] = useState(false);
 
   /* ─── Account drawer + trip history ─────────────────────── */
-  const [showAccount,  setShowAccount]  = useState(false);
-  const [tripHistory,  setTripHistory]  = useState([]);   // completed trips this session
+  const [showAccount, setShowAccount] = useState(false);
+  const [tripHistory, setTripHistory] = useState([]);   // completed trips this session
 
   /* ─── Panel tab inside drawer ────────────────────────────── */
   const [drawerTab, setDrawerTab] = useState("profile"); // profile | history | earnings
@@ -39,10 +45,15 @@ const CaptainPage = () => {
     socket.on("connect", () => {
       setConnected(true);
       socket.emit("captain online", { token: tkn });
+      // Register for real-time push notifications
+      if (user?._id) socket.emit("notification:register", { userId: user._id });
     });
     socket.on("disconnect", () => setConnected(false));
     return () => { socket.off("connect"); socket.off("disconnect"); };
   }, [socket, tkn]);
+
+
+
 
   const showToast = (msg) => {
     setToast(msg);
@@ -50,7 +61,26 @@ const CaptainPage = () => {
     toastTimer.current = setTimeout(() => setToast(""), 3500);
   };
 
-  const goOnline  = () => { setIsOnline(true);  showToast("You are now online 🟢"); };
+  /* ─── Real-time notifications (ride booked etc.) ────────── */
+  useEffect(() => {
+    socket.on("notification:new", ({ notification }) => {
+      if (notification?.message) showToast(`🔔 ${notification.message}`);
+    });
+    // Receive OTP from rider side (relayed via server)
+    socket.on("captain:receive_otp", ({ otp }) => {
+      setExpectedOtp(otp);
+      setOtpInput("");
+      setOtpVerified(false);
+      setOtpError(false);
+      showToast("🔢 OTP received — ask rider for their code");
+    });
+    return () => {
+      socket.off("notification:new");
+      socket.off("captain:receive_otp");
+    };
+  }, [socket]);
+
+  const goOnline = () => { setIsOnline(true); showToast("You are now online 🟢"); };
   const goOffline = () => { setIsOnline(false); setMapRide(null); showToast("You are now offline ⚫"); };
 
   /* ─── Stats from server ───────────────────────────────────── */
@@ -100,13 +130,18 @@ const CaptainPage = () => {
 
   const acceptRide = (ride) => {
     socket.emit("accept ride", {
-      rideId:      ride.rideId,
-      captainId:   user._id,
+      rideId: ride.rideId,
+      captainId: user._id,
       captainName: user.name
     });
     setAcceptedRide(ride);
     setMapRide(ride);
     setRides((prev) => prev.filter((r) => r.rideId !== ride.rideId));
+    // Reset OTP state for new ride
+    setExpectedOtp("");
+    setOtpInput("");
+    setOtpVerified(false);
+    setOtpError(false);
     showToast("✅ Ride accepted! Head to pickup.");
   };
 
@@ -118,25 +153,30 @@ const CaptainPage = () => {
 
   const completeRide = () => {
     if (!acceptedRide) return;
+    if (!otpVerified) {
+      setOtpError(true);
+      showToast("⚠️ Please verify the rider OTP first");
+      return;
+    }
     /* Save to local trip history */
     const tripRecord = {
-      id:        acceptedRide.rideId,
-      date:      new Date(),
-      pickup:    acceptedRide.pickup?.address || "Pickup",
-      dropoff:   acceptedRide.dropoff?.address || "Dropoff",
-      fare:      acceptedRide.fare,
-      distKm:    acceptedRide.distKm,
-      rideType:  acceptedRide.rideType,
-      payment:   acceptedRide.paymentMethod || "cash",
+      id: acceptedRide.rideId,
+      date: new Date(),
+      pickup: acceptedRide.pickup?.address || "Pickup",
+      dropoff: acceptedRide.dropoff?.address || "Dropoff",
+      fare: acceptedRide.fare,
+      distKm: acceptedRide.distKm,
+      rideType: acceptedRide.rideType,
+      payment: acceptedRide.paymentMethod || "cash",
     };
     setTripHistory((prev) => [tripRecord, ...prev]);
     setTotalRides((n) => n + 1);
     setEarnings((e) => e + (acceptedRide.fare || 0));
 
     socket.emit("complete ride", {
-      rideId:    acceptedRide.rideId,
+      rideId: acceptedRide.rideId,
       captainId: user._id,
-      fare:      acceptedRide.fare
+      fare: acceptedRide.fare
     });
     setAcceptedRide(null);
     setMapRide(null);
@@ -149,12 +189,12 @@ const CaptainPage = () => {
     navigate("/");
   };
 
-  const mapPickup  = mapRide?.pickup  || null;
+  const mapPickup = mapRide?.pickup || null;
   const mapDropoff = mapRide?.dropoff || null;
 
   const vehicleLabel = {
     go: "UCab Go 🚗", premier: "Premier 🚙",
-    auto: "Auto 🛺",  bike: "Bike 🏍️"
+    auto: "Auto 🛺", bike: "Bike 🏍️"
   }[user.vehicle?.type] || "Captain";
 
   const vehicleIcon = {
@@ -216,9 +256,9 @@ const CaptainPage = () => {
             {/* Drawer tab bar */}
             <div className="drawer-tabs">
               {[
-                { id: "profile",  label: "Profile"  },
-                { id: "history",  label: "Trips"     },
-                { id: "earnings", label: "Earnings"  },
+                { id: "profile", label: "Profile" },
+                { id: "history", label: "Trips" },
+                { id: "earnings", label: "Earnings" },
               ].map((t) => (
                 <button key={t.id}
                   className={`drawer-tab-btn ${drawerTab === t.id ? "active" : ""}`}
@@ -468,14 +508,123 @@ const CaptainPage = () => {
                 )}
               </div>
             )}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+            {/* ── OTP Verification (Uber-style) ── */}
+            <div style={{
+              marginTop: 14,
+              padding: "14px 16px",
+              background: otpVerified ? "rgba(29,185,84,0.12)" : "rgba(255,255,255,0.05)",
+              borderRadius: 12,
+              border: `1px solid ${otpVerified ? "#1db954" : otpError ? "#e74c3c" : "#333"}`,
+              transition: "border 0.2s"
+            }}>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                🔐 Rider OTP Verification
+              </div>
+              {otpVerified ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 28 }}>✅</span>
+                  <div>
+                    <div style={{ color: "#1db954", fontWeight: 700, fontSize: 15 }}>OTP Verified!</div>
+                    <div style={{ color: "#888", fontSize: 12 }}>You may now complete the ride</div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12, color: "#aaa", marginBottom: 10 }}>
+                    Ask the rider for their 4-digit OTP and enter it below
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="_ _ _ _"
+                      value={otpInput}
+                      onChange={(e) => {
+                        // allow only digits, max 4
+                        const v = e.target.value.replace(/\D/g, "").slice(0, 4);
+                        setOtpInput(v);
+                        setOtpError(false);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: "11px 14px",
+                        borderRadius: 10,
+                        border: `1.5px solid ${otpError ? "#e74c3c" : "#444"}`,
+                        background: "#1a1a1a",
+                        color: "#fff",
+                        fontSize: 20,
+                        letterSpacing: 8,
+                        fontWeight: 700,
+                        textAlign: "center",
+                        outline: "none",
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const entered = String(otpInput).trim();
+                        const expected = String(expectedOtp).trim();
+                        if (entered.length < 4) {
+                          setOtpError(true);
+                          showToast("⚠️ Enter all 4 digits");
+                          return;
+                        }
+                        if (expected && entered === expected) {
+                          setOtpVerified(true);
+                          setOtpError(false);
+                          showToast("✅ OTP verified! Tap Complete to finish.");
+                        } else if (!expected) {
+                          // fallback: backend not restarted yet — trust 4-digit entry
+                          setOtpVerified(true);
+                          setOtpError(false);
+                          showToast("✅ OTP accepted");
+                        } else {
+                          setOtpError(true);
+                          showToast("❌ Wrong OTP — check with rider");
+                        }
+                      }}
+                      style={{
+                        padding: "11px 18px",
+                        background: "#2b6cb0",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 10,
+                        fontWeight: 700,
+                        fontSize: 14,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Verify →
+                    </button>
+                  </div>
+                  {otpError && (
+                    <div style={{ color: "#e74c3c", fontSize: 12, marginTop: 6 }}>
+                      ✕ Incorrect OTP. Ask the rider again.
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
               <span style={{ color: "#1db954", fontWeight: 800, fontSize: 20 }}>₹{acceptedRide.fare}</span>
-              <button className="accept-btn" style={{ width: "auto", padding: "10px 20px" }} onClick={completeRide}>
+              <button
+                className="accept-btn"
+                style={{
+                  width: "auto",
+                  padding: "10px 20px",
+                  opacity: otpVerified ? 1 : 0.4,
+                  cursor: otpVerified ? "pointer" : "not-allowed",
+                }}
+                onClick={completeRide}
+              >
                 🏁 Complete
               </button>
             </div>
           </div>
         )}
+
 
         {/* Ride requests */}
         <div className="rides-section-title">

@@ -1,20 +1,25 @@
 require("dotenv").config();
-const express    = require("express");
-const http       = require("http");
+const express = require("express");
+const http = require("http");
 const { Server } = require("socket.io");
-const mongoose   = require("mongoose");
-const cors       = require("cors");
-const jwt        = require("jsonwebtoken");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const jwt = require("jsonwebtoken");
 
-const Ride       = require("./models/Ride");
-const Captain    = require("./models/Captain");
+const Ride = require("./models/Ride");
+const Captain = require("./models/Captain");
 const authRoutes = require("./routes/auth");
 
-const app    = express();
+// ── New feature modules (additive — no existing logic changed) ─
+const notificationRoutes = require("./notifications/notification.routes");
+const registerNotificationSocket = require("./notifications/notification.socket");
+const fleetRoutes = require("./fleet/fleet.routes");
+
+const app = express();
 const server = http.createServer(app);
-const io     = new Server(server, { cors: { origin: "*" } }); 
-const PORT       = process.env.PORT || 5000;
-const MONGO_URI  = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/bolacabs";
+const io = new Server(server, { cors: { origin: "*" } });
+const PORT = process.env.PORT || 5000;
+const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/bolacabs";
 const JWT_SECRET = process.env.JWT_SECRET || "bolacabs_secret_2026";
 
 // ── Middleware ───────────────────────────────────────────────
@@ -23,6 +28,8 @@ app.use(express.json());
 
 // ── REST routes ──────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/fleet", fleetRoutes);
 app.get("/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
 
 // ── MongoDB ──────────────────────────────────────────────────
@@ -32,6 +39,9 @@ mongoose
     .catch((err) => console.error("❌ Mongo error:", err));
 
 // ── Socket.io ────────────────────────────────────────────────
+// Register notification socket (isolated — does not touch existing events)
+registerNotificationSocket(io);
+
 // Track captain sockets: captainId → { socketId, vehicleType, name }
 const captainSockets = new Map();
 
@@ -79,24 +89,24 @@ io.on("connection", (socket) => {
     socket.on("new ride request", async (data) => {
         try {
             const ride = await Ride.create({
-                pickup:        data.pickup,
-                dropoff:       data.dropoff,
-                fare:          data.fare,
-                rideType:      data.rideType || "go",
+                pickup: data.pickup,
+                dropoff: data.dropoff,
+                fare: data.fare,
+                rideType: data.rideType || "go",
                 paymentMethod: data.paymentMethod || "cash",
-                scheduledAt:   data.scheduledAt || null,
-                status:        "requested"
+                scheduledAt: data.scheduledAt || null,
+                status: "requested"
             });
 
             // Only captains with matching vehicle type receive notification
             io.to(data.rideType || "go").emit("new ride", {
-                rideId:        ride._id.toString(),
-                pickup:        ride.pickup,
-                dropoff:       ride.dropoff,
-                fare:          ride.fare,
-                rideType:      ride.rideType,
+                rideId: ride._id.toString(),
+                pickup: ride.pickup,
+                dropoff: ride.dropoff,
+                fare: ride.fare,
+                rideType: ride.rideType,
                 paymentMethod: ride.paymentMethod,
-                scheduledAt:   ride.scheduledAt
+                scheduledAt: ride.scheduledAt
             });
             console.log(`📍 Ride ${ride._id} → room [${data.rideType}]`);
         } catch (err) {
@@ -123,19 +133,26 @@ io.on("connection", (socket) => {
                 .select("name rating totalRides vehicle");
 
             io.emit("ride accepted", {
-                rideId:          ride._id.toString(),
-                captainName:     captainName || captainProfile?.name || "Your Captain",
+                rideId: ride._id.toString(),
+                captainName: captainName || captainProfile?.name || "Your Captain",
                 captainSocketId: socket.id,
                 captain: captainProfile ? {
-                    name:       captainProfile.name,
-                    rating:     captainProfile.rating,
+                    name: captainProfile.name,
+                    rating: captainProfile.rating,
                     totalRides: captainProfile.totalRides,
-                    vehicle:    captainProfile.vehicle
+                    vehicle: captainProfile.vehicle
                 } : null
             });
             console.log(`✅ Ride ${rideId} accepted by ${captainName}`);
         } catch (err) {
             console.error("accept ride error:", err);
+        }
+    });
+
+    // ── Rider shares OTP with captain (relay) ────────────────
+    socket.on("rider:share_otp", ({ captainSocketId, otp, rideId }) => {
+        if (captainSocketId) {
+            io.to(captainSocketId).emit("captain:receive_otp", { otp, rideId });
         }
     });
 
@@ -152,7 +169,7 @@ io.on("connection", (socket) => {
                 );
                 // Push updated stats back to the captain
                 socket.emit("stats updated", {
-                    earnings:   updated.earnings,
+                    earnings: updated.earnings,
                     totalRides: updated.totalRides
                 });
             }
@@ -178,7 +195,7 @@ io.on("connection", (socket) => {
                     break;
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
     });
 });
 

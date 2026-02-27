@@ -9,42 +9,42 @@ const socket = io(BACKEND_URL);
 
 /* ─── Constants ─────────────────────────────────────────────── */
 const RIDE_TYPES = [
-  { id: "go",      name: "UCab Go",  icon: "🚗",  time: "2 min", base: 30, perKm: 10 },
-  { id: "premier", name: "Premier",  icon: "🚙",  time: "4 min", base: 60, perKm: 15 },
-  { id: "auto",    name: "Auto",     icon: "🛺",  time: "3 min", base: 20, perKm: 7  },
-  { id: "bike",    name: "Bike",     icon: "🏍️", time: "1 min", base: 15, perKm: 5  },
+  { id: "go", name: "UCab Go", icon: "🚗", time: "2 min", base: 30, perKm: 10 },
+  { id: "premier", name: "Premier", icon: "🚙", time: "4 min", base: 60, perKm: 15 },
+  { id: "auto", name: "Auto", icon: "🛺", time: "3 min", base: 20, perKm: 7 },
+  { id: "bike", name: "Bike", icon: "🏍️", time: "1 min", base: 15, perKm: 5 },
 ];
 
 const COURIER_VEHICLES = [
-  { id: "bike",  name: "Bike",  icon: "🏍️", base: 25, perKm: 6,  maxKg: 5  },
-  { id: "auto",  name: "Auto",  icon: "🛺",  base: 40, perKm: 8,  maxKg: 15 },
-  { id: "go",    name: "Van",   icon: "🚐",  base: 80, perKm: 12, maxKg: 50 },
+  { id: "bike", name: "Bike", icon: "🏍️", base: 25, perKm: 6, maxKg: 5 },
+  { id: "auto", name: "Auto", icon: "🛺", base: 40, perKm: 8, maxKg: 15 },
+  { id: "go", name: "Van", icon: "🚐", base: 80, perKm: 12, maxKg: 50 },
 ];
 
 const RENTAL_VEHICLES = [
-  { id: "hatch",  name: "Hatchback", icon: "🚗",  perHr: 80,  desc: "Maruti, Hyundai i10" },
-  { id: "sedan",  name: "Sedan",     icon: "🚘",  perHr: 120, desc: "Honda City, Dzire"   },
-  { id: "suv",    name: "SUV",       icon: "🚙",  perHr: 180, desc: "Innova, Ertiga"      },
-  { id: "bike",   name: "Bike",      icon: "🏍️", perHr: 40,  desc: "Activa, Splendor"   },
+  { id: "hatch", name: "Hatchback", icon: "🚗", perHr: 80, desc: "Maruti, Hyundai i10" },
+  { id: "sedan", name: "Sedan", icon: "🚘", perHr: 120, desc: "Honda City, Dzire" },
+  { id: "suv", name: "SUV", icon: "🚙", perHr: 180, desc: "Innova, Ertiga" },
+  { id: "bike", name: "Bike", icon: "🏍️", perHr: 40, desc: "Activa, Splendor" },
 ];
 
 const PAY_METHODS = [
   { id: "cash", label: "Cash", icon: "💵" },
-  { id: "upi",  label: "UPI",  icon: "📲" },
+  { id: "upi", label: "UPI", icon: "📲" },
 ];
 
 const CANCEL_FREE_MINS = 2;
-const CANCEL_FEE       = 50;
+const CANCEL_FEE = 50;
 
-const calcFare   = (type, km) => Math.round(type.base + type.perKm * (km || 5));
+const calcFare = (type, km) => Math.round(type.base + type.perKm * (km || 5));
 const calcCourier = (v, km, kg) => Math.round(v.base + v.perKm * (km || 3) + (kg > 2 ? (kg - 2) * 5 : 0));
-const fmtTime    = (date) =>
+const fmtTime = (date) =>
   date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 
 /* ─── Draggable sheet heights ──────────────────────────────── */
-const PEEK   = 160;  // collapsed
-const MID    = Math.round(window.innerHeight * 0.5);
-const FULL   = Math.round(window.innerHeight * 0.88);
+const PEEK = 160;  // collapsed
+const MID = Math.round(window.innerHeight * 0.5);
+const FULL = Math.round(window.innerHeight * 0.88);
 
 const UserPage = () => {
   const navigate = useNavigate();
@@ -54,50 +54,50 @@ const UserPage = () => {
   const [serviceTab, setServiceTab] = useState("ride"); // ride | courier | rental
 
   /* ─── Core ride state ─────────────────────────────────────── */
-  const [pickup,       setPickup]       = useState(null);
-  const [dropoff,      setDropoff]      = useState(null);
+  const [pickup, setPickup] = useState(null);
+  const [dropoff, setDropoff] = useState(null);
   const [selectedType, setSelectedType] = useState("go");
-  const [routeInfo,    setRouteInfo]    = useState(null);
-  const [rideStatus,   setRideStatus]   = useState("idle");
-  const [currentRide,  setCurrentRide]  = useState(null);
-  const [captainPos,   setCaptainPos]   = useState(null);
-  const [captainInfo,  setCaptainInfo]  = useState(null);
-  const [tripOtp,      setTripOtp]      = useState("");
-  const [toast,        setToast]        = useState("");
-  const [payMethod,    setPayMethod]    = useState("cash");
+  const [routeInfo, setRouteInfo] = useState(null);
+  const [rideStatus, setRideStatus] = useState("idle");
+  const [currentRide, setCurrentRide] = useState(null);
+  const [captainPos, setCaptainPos] = useState(null);
+  const [captainInfo, setCaptainInfo] = useState(null);
+  const [tripOtp, setTripOtp] = useState("");
+  const [toast, setToast] = useState("");
+  const [payMethod, setPayMethod] = useState("cash");
 
   /* ─── Schedule / arrival state ────────────────────────────── */
-  const [bookingMode,     setBookingMode]     = useState("now");
-  const [schedDate,       setSchedDate]       = useState("");
-  const [schedTime,       setSchedTime]       = useState("");
-  const [schedConfirmed,  setSchedConfirmed]  = useState(false);
-  const [arrivalTime,     setArrivalTime]     = useState("");
-  const [breaks,          setBreaks]          = useState([{ label: "Lunch", mins: 30 }]);
+  const [bookingMode, setBookingMode] = useState("now");
+  const [schedDate, setSchedDate] = useState("");
+  const [schedTime, setSchedTime] = useState("");
+  const [schedConfirmed, setSchedConfirmed] = useState(false);
+  const [arrivalTime, setArrivalTime] = useState("");
+  const [breaks, setBreaks] = useState([{ label: "Lunch", mins: 30 }]);
   const [departureResult, setDepartureResult] = useState(null);
 
   /* ─── Account drawer ──────────────────────────────────────── */
   const [showAccount, setShowAccount] = useState(false);
 
   /* ─── Courier state ───────────────────────────────────────── */
-  const [cFrom,         setCFrom]         = useState(null);
-  const [cTo,           setCTo]           = useState(null);
-  const [cVehicle,      setCVehicle]      = useState("bike");
-  const [cWeight,       setCWeight]       = useState(1);
-  const [cName,         setCName]         = useState("");
-  const [cPhone,        setCPhone]        = useState("");
-  const [cRouteInfo,    setCRouteInfo]    = useState(null);
+  const [cFrom, setCFrom] = useState(null);
+  const [cTo, setCTo] = useState(null);
+  const [cVehicle, setCVehicle] = useState("bike");
+  const [cWeight, setCWeight] = useState(1);
+  const [cName, setCName] = useState("");
+  const [cPhone, setCPhone] = useState("");
+  const [cRouteInfo, setCRouteInfo] = useState(null);
   const [courierStatus, setCourierStatus] = useState("idle"); // idle | sent
 
   /* ─── Rental state ────────────────────────────────────────── */
-  const [rVehicle,   setRVehicle]   = useState("hatch");
-  const [rHours,     setRHours]     = useState(4);
-  const [rWithDriver,setRWithDriver]= useState(false);
-  const [rLocation,  setRLocation]  = useState(null);
+  const [rVehicle, setRVehicle] = useState("hatch");
+  const [rHours, setRHours] = useState(4);
+  const [rWithDriver, setRWithDriver] = useState(false);
+  const [rLocation, setRLocation] = useState(null);
   const [rentalStatus, setRentalStatus] = useState("idle"); // idle | confirmed
 
   /* ─── Draggable bottom sheet ──────────────────────────────── */
-  const sheetRef   = useRef(null);
-  const dragState  = useRef({ dragging: false, startY: 0, startH: 0 });
+  const sheetRef = useRef(null);
+  const dragState = useRef({ dragging: false, startY: 0, startH: 0 });
   const [sheetH, setSheetH] = useState(PEEK);
 
   const snapSheet = useCallback((currentH) => {
@@ -117,8 +117,8 @@ const UserPage = () => {
     const onMove = (e) => {
       if (!dragState.current.dragging) return;
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      const delta   = dragState.current.startY - clientY;
-      const newH    = Math.min(FULL, Math.max(PEEK, dragState.current.startH + delta));
+      const delta = dragState.current.startY - clientY;
+      const newH = Math.min(FULL, Math.max(PEEK, dragState.current.startH + delta));
       setSheetH(newH);
     };
     const onEnd = () => {
@@ -126,15 +126,15 @@ const UserPage = () => {
       dragState.current.dragging = false;
       setSheetH((h) => { snapSheet(h); return h; });
     };
-    window.addEventListener("mousemove",  onMove,  { passive: false });
-    window.addEventListener("mouseup",    onEnd);
-    window.addEventListener("touchmove",  onMove,  { passive: false });
-    window.addEventListener("touchend",   onEnd);
+    window.addEventListener("mousemove", onMove, { passive: false });
+    window.addEventListener("mouseup", onEnd);
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onEnd);
     return () => {
-      window.removeEventListener("mousemove",  onMove);
-      window.removeEventListener("mouseup",    onEnd);
-      window.removeEventListener("touchmove",  onMove);
-      window.removeEventListener("touchend",   onEnd);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onEnd);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onEnd);
     };
   }, [snapSheet]);
 
@@ -146,11 +146,11 @@ const UserPage = () => {
   /* ─── Arrival calculator ──────────────────────────────────── */
   useEffect(() => {
     if (bookingMode !== "arrival" || !arrivalTime || !routeInfo) return;
-    const tripMins  = routeInfo.durationMin || 0;
+    const tripMins = routeInfo.durationMin || 0;
     const breakMins = breaks.reduce((s, b) => s + (Number(b.mins) || 0), 0);
     const totalMins = tripMins + breakMins;
-    const arrival   = new Date();
-    const [h, m]    = arrivalTime.split(":").map(Number);
+    const arrival = new Date();
+    const [h, m] = arrivalTime.split(":").map(Number);
     arrival.setHours(h, m, 0, 0);
     const depart = new Date(arrival.getTime() - totalMins * 60000);
     setDepartureResult({ depart, tripMins, breakMins, totalMins });
@@ -159,18 +159,36 @@ const UserPage = () => {
   /* ─── Socket events ───────────────────────────────────────── */
   const acceptedAt = useRef(null);
   const toastTimer = useRef(null);
-  const showToast  = (msg) => {
+  const showToast = (msg) => {
     setToast(msg);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(""), 4000);
   };
+
+  /* ── Real-time notification: register userId so server can push to this socket ── */
+  useEffect(() => {
+    if (user?._id) socket.emit("notification:register", { userId: user._id });
+    socket.on("notification:new", ({ notification }) => {
+      if (notification?.message) showToast(`🔔 ${notification.message}`);
+    });
+    return () => socket.off("notification:new");
+  }, []);
+
 
   useEffect(() => {
     socket.on("ride accepted", (data) => {
       setCurrentRide(data);
       setRideStatus("accepted");
       setCaptainInfo(data.captain || null);
-      setTripOtp(String(Math.floor(1000 + Math.random() * 9000)));
+      const generatedOtp = String(Math.floor(1000 + Math.random() * 9000));
+      setTripOtp(generatedOtp);
+      // Send OTP to captain so they can verify before starting trip
+      socket.emit("rider:share_otp", {
+        captainSocketId: data.captainSocketId,
+        otp: generatedOtp,
+        rideId: data.rideId,
+      });
+
       acceptedAt.current = Date.now();
       if (pickup) setCaptainPos({
         lat: pickup.lat + (Math.random() - 0.5) * 0.01,
@@ -245,7 +263,7 @@ const UserPage = () => {
 
   /* ─── Courier helpers ─────────────────────────────────────── */
   const courierVehicle = COURIER_VEHICLES.find((v) => v.id === cVehicle);
-  const courierFare    = calcCourier(courierVehicle, cRouteInfo?.distKm, cWeight);
+  const courierFare = calcCourier(courierVehicle, cRouteInfo?.distKm, cWeight);
   const sendCourier = () => {
     if (!cFrom || !cTo) { showToast("⚠️ Set pickup & delivery address"); return; }
     if (!cName || !cPhone) { showToast("⚠️ Enter receiver name & phone"); return; }
@@ -255,8 +273,8 @@ const UserPage = () => {
 
   /* ─── Rental helpers ──────────────────────────────────────── */
   const rentalVehicle = RENTAL_VEHICLES.find((v) => v.id === rVehicle);
-  const driverExtra   = rWithDriver ? 100 : 0;
-  const rentalFare    = rentalVehicle.perHr * rHours + driverExtra;
+  const driverExtra = rWithDriver ? 100 : 0;
+  const rentalFare = rentalVehicle.perHr * rHours + driverExtra;
   const confirmRental = () => {
     if (!rLocation) { showToast("⚠️ Set your pickup location"); return; }
     setRentalStatus("confirmed");
@@ -264,13 +282,13 @@ const UserPage = () => {
   };
 
   /* ─── Misc helpers ────────────────────────────────────────── */
-  const addBreak    = () => setBreaks((b) => [...b, { label: "Break", mins: 15 }]);
+  const addBreak = () => setBreaks((b) => [...b, { label: "Break", mins: 15 }]);
   const removeBreak = (i) => setBreaks((b) => b.filter((_, idx) => idx !== i));
   const updateBreak = (i, f, v) =>
     setBreaks((b) => b.map((br, idx) => idx === i ? { ...br, [f]: v } : br));
 
   const rideType = RIDE_TYPES.find((r) => r.id === selectedType);
-  const fare     = calcFare(rideType, routeInfo?.distKm);
+  const fare = calcFare(rideType, routeInfo?.distKm);
 
   /* ─── Render ──────────────────────────────────────────────── */
   return (
@@ -280,7 +298,7 @@ const UserPage = () => {
       <div className="map-fullscreen">
         <MapView
           pickup={serviceTab === "courier" ? cFrom : pickup}
-          dropoff={serviceTab === "courier" ? cTo   : dropoff}
+          dropoff={serviceTab === "courier" ? cTo : dropoff}
           captain={captainPos}
           onRouteFound={serviceTab === "courier" ? setCRouteInfo : setRouteInfo}
           height="100%" />
@@ -289,12 +307,26 @@ const UserPage = () => {
       {/* Top bar */}
       <div className="top-bar">
         <div className="top-bar-logo">UCab <span className="logo-accent">Services</span></div>
-        <div className="top-bar-right">
+        <div className="top-bar-right" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* ── New feature nav links ── */}
+          <button
+            title="Notifications"
+            onClick={() => navigate("/notifications")}
+            style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 10, padding: "7px 10px", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>
+            🔔
+          </button>
+          <button
+            title="Fleet Service"
+            onClick={() => navigate("/fleet/book")}
+            style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 10, padding: "7px 10px", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>
+            🚌
+          </button>
           <button className="account-btn" onClick={() => setShowAccount(true)}>
             <div className="avatar">{user.name?.[0]?.toUpperCase() || "U"}</div>
           </button>
         </div>
       </div>
+
 
       {/* ── Account Drawer ── */}
       {showAccount && (
@@ -332,6 +364,27 @@ const UserPage = () => {
             </div>
             <button className="btn-primary" style={{ marginTop: 20, background: "#e74c3c" }}
               onClick={logout}>🚪 Logout</button>
+
+            {/* ── Quick links to new features ── */}
+            <div style={{ marginTop: 16, borderTop: "1px solid #333", paddingTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 12, color: "#888", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>More Services</div>
+              <button onClick={() => { setShowAccount(false); navigate("/notifications"); }}
+                style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, padding: "10px 14px", color: "#eee", cursor: "pointer", textAlign: "left", fontSize: 14 }}>
+                🔔 My Notifications
+              </button>
+              <button onClick={() => { setShowAccount(false); navigate("/fleet/book"); }}
+                style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, padding: "10px 14px", color: "#eee", cursor: "pointer", textAlign: "left", fontSize: 14 }}>
+                🗓️ Book Fleet Vehicles
+              </button>
+              <button onClick={() => { setShowAccount(false); navigate("/fleet/register-owner"); }}
+                style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, padding: "10px 14px", color: "#eee", cursor: "pointer", textAlign: "left", fontSize: 14 }}>
+                🚌 Register Fleet Owner
+              </button>
+              <button onClick={() => { setShowAccount(false); navigate("/fleet/add-vehicle"); }}
+                style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, padding: "10px 14px", color: "#eee", cursor: "pointer", textAlign: "left", fontSize: 14 }}>
+                🚗 Add Fleet Vehicle
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -477,9 +530,9 @@ const UserPage = () => {
           {/* Service tab bar */}
           <div className="service-tabs">
             {[
-              { id: "ride",    icon: "🚗",  label: "Rides"   },
-              { id: "courier", icon: "📦",  label: "Courier" },
-              { id: "rental",  icon: "🔑",  label: "Rentals" },
+              { id: "ride", icon: "🚗", label: "Rides" },
+              { id: "courier", icon: "📦", label: "Courier" },
+              { id: "rental", icon: "🔑", label: "Rentals" },
             ].map((t) => (
               <button key={t.id}
                 className={`svc-tab ${serviceTab === t.id ? "active" : ""}`}
@@ -515,8 +568,8 @@ const UserPage = () => {
                   <>
                     <div className="booking-mode-row">
                       {[
-                        { id: "now",     icon: "⚡", label: "Ride Now"   },
-                        { id: "schedule",icon: "📅", label: "Schedule"   },
+                        { id: "now", icon: "⚡", label: "Ride Now" },
+                        { id: "schedule", icon: "📅", label: "Schedule" },
                         { id: "arrival", icon: "🕐", label: "By Arrival" },
                       ].map((m) => (
                         <button key={m.id}

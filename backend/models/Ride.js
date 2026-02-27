@@ -23,4 +23,3 @@ const rideSchema = new mongoose.Schema({
     cancelledBy:    { type: String, default: null }    // user | captain
 }, { timestamps: true });
 module.exports = mongoose.model("Ride", rideSchema);
-module.exports = mongoose.model("Ride",rideSchema);
