@@ -21,7 +21,7 @@ const server = http.createServer(app);
 // socket.io server
 const io = new Server(server, {
     cors: {
-        origin: ["http://localhost:3000", "https://your-frontend.vercel.app"],
+        origin: ["http://localhost:3000", "https://ucab-service.vercel.app/"],
         credentials: true
     }
 });
@@ -33,7 +33,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "bolacabs_secret_2026";
 
 // ── Middleware ───────────────────────────────────────────────
 app.use(cors({
-    origin: ["http://localhost:3000", "https://your-frontend.vercel.app"],
+    origin: ["http://localhost:3000", "https://ucab-service.vercel.app/"],
     credentials: true
 }));
 app.use(express.json());
