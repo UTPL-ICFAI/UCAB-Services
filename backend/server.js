@@ -21,7 +21,8 @@ const server = http.createServer(app);
 const allowedOrigins = [
     "http://localhost:3000",
     "https://ucab-service.vercel.app",
-    "https://ucabservices.onrender.com"
+    "https://ucabservices.onrender.com",
+    "https://ucab-services.onrender.com"
 ];
 
 const corsOptions = {

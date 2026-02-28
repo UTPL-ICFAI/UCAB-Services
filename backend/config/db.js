@@ -27,7 +27,10 @@ const poolConfig = process.env.DB_HOST
         user: process.env.DB_USER || "postgres",
         password: process.env.DB_PASSWORD || "",
         database: process.env.DB_NAME || "UCab",
-        ssl: false,   // local Postgres — no SSL needed
+        // Force SSL if not localhost (required by Render/Supabase)
+        ssl: (process.env.DB_HOST && process.env.DB_HOST !== "localhost")
+            ? { rejectUnauthorized: false }
+            : false,
     }
     : {
         // Fall back to full connection string (cloud providers)
