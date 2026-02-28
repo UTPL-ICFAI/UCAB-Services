@@ -2,9 +2,9 @@ require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const mongoose = require("mongoose");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+const pool = require("./config/db");  // PostgreSQL pool
 
 const Ride = require("./models/Ride");
 const Captain = require("./models/Captain");
@@ -27,8 +27,7 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/bolacabs";
-const JWT_SECRET = process.env.JWT_SECRET || "bolacabs_secret_2026";
+const JWT_SECRET = process.env.JWT_SECRET || "ucab_secret_2026";
 
 
 // ── Middleware ───────────────────────────────────────────────
@@ -44,11 +43,12 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/fleet", fleetRoutes);
 app.get("/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
 
-// ── MongoDB ──────────────────────────────────────────────────
-mongoose
-    .connect(MONGO_URI)
-    .then(() => console.log("✅ MongoDB connected"))
-    .catch((err) => console.error("❌ Mongo error:", err));
+// ── PostgreSQL ───────────────────────────────────────────────
+// The pool connects lazily on first query; ping here to surface
+// misconfigured DATABASE_URL at startup rather than first request.
+pool.query("SELECT 1")
+    .then(() => console.log("✅ PostgreSQL connected"))
+    .catch((err) => console.error("❌ PostgreSQL error:", err.message));
 
 // ── Socket.io ────────────────────────────────────────────────
 // Register notification socket (isolated — does not touch existing events)

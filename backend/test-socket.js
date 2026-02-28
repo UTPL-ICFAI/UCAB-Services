@@ -1,11 +1,10 @@
-const io       = require("socket.io-client");
-const jwt      = require("jsonwebtoken");
-const mongoose = require("mongoose");
-const SECRET   = "bolacabs_secret_2026";
+const io = require("socket.io-client");
+const jwt = require("jsonwebtoken");
+const SECRET = process.env.JWT_SECRET || "ucab_secret_2026";
+const Captain = require("./models/Captain");
 
-mongoose.connect("mongodb://127.0.0.1:27017/bolacabs").then(async () => {
-    const Captain = require("./models/Captain");
-    const cap = await Captain.findOne({}).lean();
+(async () => {
+    const cap = await Captain.findOne({});
     if (!cap) { console.log("No captain in DB"); process.exit(1); }
 
     const token = jwt.sign({ id: cap._id, role: "captain" }, SECRET, { expiresIn: "1h" });
@@ -28,9 +27,9 @@ mongoose.connect("mongodb://127.0.0.1:27017/bolacabs").then(async () => {
             const rideType = cap.vehicle && cap.vehicle.type ? cap.vehicle.type : "go";
             console.log("[user] booking rideType:", rideType);
             userSock.emit("new ride request", {
-                pickup:  { lat: 12.9,  lng: 77.6,  address: "MG Road, Bangalore" },
+                pickup: { lat: 12.9, lng: 77.6, address: "MG Road, Bangalore" },
                 dropoff: { lat: 12.95, lng: 77.65, address: "Indiranagar, Bangalore" },
-                fare:    150,
+                fare: 150,
                 rideType
             });
         });

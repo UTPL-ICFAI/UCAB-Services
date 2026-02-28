@@ -1,10 +1,10 @@
-const express  = require("express");
-const jwt      = require("jsonwebtoken");
-const User     = require("../models/User");
-const Captain  = require("../models/Captain");
-const router   = express.Router();
+const express = require("express");
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+const Captain = require("../models/Captain");
+const router = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || "bolacabs_secret_2026";
+const JWT_SECRET = process.env.JWT_SECRET || "ucab_secret_2026";
 
 // ── Helper: sign token ──────────────────────────────────────
 const signToken = (payload) =>
@@ -52,7 +52,7 @@ router.post("/captain/register", async (req, res) => {
             return res.status(409).json({ message: "Phone already registered" });
 
         const captain = await Captain.create({ name, phone, password, vehicle });
-        const token   = signToken({ id: captain._id, role: "captain" });
+        const token = signToken({ id: captain._id, role: "captain" });
 
         res.status(201).json({
             token,

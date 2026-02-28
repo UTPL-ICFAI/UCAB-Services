@@ -40,7 +40,7 @@ const registerOwner = async (req, res) => {
         });
 
         // Don't return password hash to client
-        const { password: _pw, ...safeOwner } = owner.toObject();
+        const { password: _pw, ...safeOwner } = owner;
         res.status(201).json({ message: "Fleet owner registered successfully", owner: safeOwner });
     } catch (err) {
         console.error("registerOwner error:", err);
@@ -67,7 +67,7 @@ const loginOwner = async (req, res) => {
             return res.status(401).json({ message: "Incorrect password" });
         }
 
-        const { password: _pw, ...safeOwner } = owner.toObject();
+        const { password: _pw, ...safeOwner } = owner;
         res.json({ message: "Login successful", owner: safeOwner });
     } catch (err) {
         console.error("loginOwner error:", err);
