@@ -1,53 +1,49 @@
 /**
  * config/db.js
- * -----------
- * Single pg Pool singleton shared across the entire backend.
- *
- * Supports two .env formats:
- *
- *   Format 1 — Individual variables (recommended for local dev):
- *     DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
- *
- *   Format 2 — Single connection string (recommended for cloud):
- *     DATABASE_URL="postgresql://user:pass@host:5432/dbname?sslmode=require"
- *
- * Usage:
- *   const pool = require("../config/db");
- *   const { rows } = await pool.query("SELECT ...", [...params]);
+ * 
+ * Production-ready PostgreSQL Pool configuration for Render.
+ * Handles SSL requirements for remote databases while supporting local development.
  */
 
 require("dotenv").config();
 const { Pool } = require("pg");
 
-// Build connection config — individual vars take priority over DATABASE_URL
-const poolConfig = process.env.DB_HOST
-    ? {
-        host: process.env.DB_HOST || "localhost",
-        port: Number(process.env.DB_PORT) || 5432,
-        user: process.env.DB_USER || "postgres",
-        password: process.env.DB_PASSWORD || "",
-        database: process.env.DB_NAME || "UCab",
-        // Force SSL if not localhost (required by Render/Supabase)
-        ssl: (process.env.DB_HOST && process.env.DB_HOST !== "localhost")
-            ? { rejectUnauthorized: false }
-            : false,
-    }
-    : {
-        // Fall back to full connection string (cloud providers)
-        connectionString: process.env.DATABASE_URL,
-        ssl: process.env.DATABASE_URL?.includes("sslmode=require")
-            ? { rejectUnauthorized: false }
-            : false,
-    };
+const isProduction = process.env.NODE_ENV === "production" || !!process.env.DATABASE_URL;
+
+const poolConfig = {
+    // Priority 1: Use DATABASE_URL (Standard for Render/Heroku/Supabase)
+    connectionString: process.env.DATABASE_URL,
+
+    // Priority 2: Fallback to individual variables if DATABASE_URL is missing
+    host: process.env.DB_HOST || "localhost",
+    port: Number(process.env.DB_PORT) || 5432,
+    user: process.env.DB_USER || "postgres",
+    password: process.env.DB_PASSWORD || "",
+    database: process.env.DB_NAME || "UCab",
+
+    // SSL Configuration: Required for Render PostgreSQL
+    // We enable it if in production or if DATABASE_URL is present.
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
+
+    // Pool settings for performance and stability
+    max: 20,              // max number of clients in the pool
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+};
 
 const pool = new Pool(poolConfig);
 
+// Event listeners for monitoring
 pool.on("connect", () => {
-    console.log("✅ PostgreSQL connected");
+    // console.log("✅ PostgreSQL Pool connected");
 });
 
 pool.on("error", (err) => {
-    console.error("❌ PostgreSQL pool error:", err.message);
+    console.error("❌ Unexpected PostgreSQL pool error:", err.message);
 });
 
-module.exports = pool;
+module.exports = {
+    query: (text, params) => pool.query(text, params),
+    connect: () => client.connect(),
+    pool // export the pool instance if needed for transactions
+};
