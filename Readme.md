@@ -1,6 +1,6 @@
 # UCab Services
 
-UCab Services is a lightweight ride-hailing demo (ride, courier and rental flows) built with a React frontend and an Express + MongoDB backend. It demonstrates real-map routing (OpenStreetMap + OSRM), address search (Nominatim), realtime driver matching (Socket.io), and a simple JWT-based auth system for riders and captains.
+UCab Services is a lightweight ride-hailing demo built with a React frontend and an Express + PostgreSQL backend. It demonstrates real-map routing (OpenStreetMap + OSRM), address search (Nominatim), realtime driver matching (Socket.io), and a JWT-based auth system.
 
 This repository is a working prototype intended for learning and local LAN testing — not for production use without reviewing security, scaling, and privacy considerations.
 
@@ -25,7 +25,7 @@ This repository is a working prototype intended for learning and local LAN testi
 
 **Tech Stack**
 - Frontend: React 19, react-router-dom, react-leaflet, Leaflet, axios, socket.io-client
-- Backend: Node.js (Express 5), Socket.io, Mongoose (MongoDB), bcryptjs, jsonwebtoken
+- Backend: Node.js (Express 5), Socket.io, PostgreSQL (raw pg), bcryptjs, jsonwebtoken
 - Maps/Routing: OpenStreetMap (tiles), Nominatim (search), OSRM (routing)
 
 ---

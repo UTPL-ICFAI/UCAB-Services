@@ -208,7 +208,7 @@ const FleetBooking = {
 
                     // ── Assemble final docs ───────────────────────────────
                     const docs = rows.map(r => {
-                        const doc = toDoc(r);
+                        const doc = toDocWithSave(r);
                         if (populateList.includes("assignedDriverId") && r.assigned_driver_id) {
                             doc.assignedDriverId = driverMap[r.assigned_driver_id] || r.assigned_driver_id;
                         }
