@@ -31,8 +31,11 @@ router.post("/user/login", async (req, res) => {
             user: { _id: user._id, name: user.name, phone: user.phone, role: "user" }
         });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: "Server error" });
+        console.error("❌ Login Error:", err.message);
+        if (err.code === "42P01") { // Undefined table
+            return res.status(500).json({ message: "Database tables missing. Did you run the migration?" });
+        }
+        res.status(500).json({ message: "Server error: " + err.message });
     }
 });
 

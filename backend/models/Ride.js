@@ -45,7 +45,7 @@ const Ride = {
                 data.pickup ? JSON.stringify(data.pickup) : null,
                 data.dropoff ? JSON.stringify(data.dropoff) : null,
                 data.fare ?? null,
-                data.rideType ?? "BolaCab Go",
+                data.rideType ?? "UCab Go",
                 data.paymentMethod ?? "cash",
                 data.scheduledAt ?? null,
                 data.status ?? "requested",

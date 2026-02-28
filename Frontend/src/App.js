@@ -18,8 +18,8 @@ import "./App.css";
 
 /* ── Rider / Captain guard ─────────────────────────────────── */
 const PrivateRoute = ({ children, expectedRole }) => {
-  const token = localStorage.getItem("bolacabs_token");
-  const user = JSON.parse(localStorage.getItem("bolacabs_user") || "null");
+  const token = localStorage.getItem("ucab_token");
+  const user = JSON.parse(localStorage.getItem("ucab_user") || "null");
   if (!token || !user) return <Navigate to="/" replace />;
   if (expectedRole && user.role !== expectedRole) {
     return <Navigate to={user.role === "user" ? "/user" : "/captain"} replace />;

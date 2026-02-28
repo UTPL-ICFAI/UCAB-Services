@@ -18,23 +18,38 @@ const fleetRoutes = require("./fleet/fleet.routes");
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = [
+    "http://localhost:3000",
+    "https://ucab-service.vercel.app",
+    "https://ucabservices.onrender.com"
+];
+
+const corsOptions = {
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl)
+        if (!origin) return callback(null, true);
+
+        const isAllowed = allowedOrigins.includes(origin) ||
+            origin.endsWith(".vercel.app");
+
+        if (isAllowed) {
+            callback(null, true);
+        } else {
+            callback(new Error("Not allowed by CORS"));
+        }
+    },
+    credentials: true
+};
+
 // socket.io server
-const io = new Server(server, {
-    cors: {
-        origin: ["http://localhost:3000", "https://ucab-service.vercel.app"],
-        credentials: true
-    }
-});
+const io = new Server(server, { cors: corsOptions });
 
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "ucab_secret_2026";
 
 
 // ── Middleware ───────────────────────────────────────────────
-app.use(cors({
-    origin: ["http://localhost:3000", "https://ucab-service.vercel.app"],
-    credentials: true
-}));
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // ── REST routes ──────────────────────────────────────────────
@@ -44,10 +59,19 @@ app.use("/api/fleet", fleetRoutes);
 app.get("/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
 
 // ── PostgreSQL ───────────────────────────────────────────────
-// The pool connects lazily on first query; ping here to surface
-// misconfigured DATABASE_URL at startup rather than first request.
 pool.query("SELECT 1")
-    .then(() => console.log("✅ PostgreSQL connected"))
+    .then(() => {
+        console.log("✅ PostgreSQL connected");
+        // Quick check: does the users table exist?
+        return pool.query("SELECT to_regclass('public.users') AS exists");
+    })
+    .then(res => {
+        if (!res.rows[0].exists) {
+            console.error("⚠️  WARNING: Table 'users' not found. Please run the migration!");
+        } else {
+            console.log("✅ Database tables verified");
+        }
+    })
     .catch((err) => console.error("❌ PostgreSQL error:", err.message));
 
 // ── Socket.io ────────────────────────────────────────────────
@@ -213,5 +237,5 @@ io.on("connection", (socket) => {
 
 // ── Start — bind to 0.0.0.0 so LAN devices can connect ──────
 server.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 Bola-cabs server → http://0.0.0.0:${PORT}`);
+    console.log(`🚀 UCab server → http://0.0.0.0:${PORT}`);
 });

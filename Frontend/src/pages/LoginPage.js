@@ -4,37 +4,37 @@ import axios from "axios";
 import BACKEND_URL from "../config";
 
 const VEHICLE_TYPES = [
-  { id: "go",      label: "BolaCab Go",  icon: "🚗", desc: "Affordable sedan" },
-  { id: "premier", label: "Premier",     icon: "🚙", desc: "Comfortable ride"  },
-  { id: "auto",    label: "Auto",        icon: "🛺", desc: "Quick & cheap"     },
-  { id: "bike",    label: "Bike",        icon: "🏍️", desc: "Fastest option"   },
+  { id: "go", label: "BolaCab Go", icon: "🚗", desc: "Affordable sedan" },
+  { id: "premier", label: "Premier", icon: "🚙", desc: "Comfortable ride" },
+  { id: "auto", label: "Auto", icon: "🛺", desc: "Quick & cheap" },
+  { id: "bike", label: "Bike", icon: "🏍️", desc: "Fastest option" },
 ];
 
 export default function LoginPage() {
-  const navigate  = useNavigate();
-  const [tab, setTab]           = useState("user");           // "user" | "captain"
+  const navigate = useNavigate();
+  const [tab, setTab] = useState("user");           // "user" | "captain"
   const [captainMode, setCaptainMode] = useState("login");    // "login" | "register"
 
   // User fields
   const [uPhone, setUPhone] = useState("");
-  const [uName,  setUName]  = useState("");
-  const [uStep,  setUStep]  = useState("phone");              // "phone" | "name"
+  const [uName, setUName] = useState("");
+  const [uStep, setUStep] = useState("phone");              // "phone" | "name"
 
   // Captain login fields
   const [cPhone, setCPhone] = useState("");
-  const [cPass,  setCPass]  = useState("");
+  const [cPass, setCPass] = useState("");
 
   // Captain register fields
-  const [rName,  setRName]  = useState("");
+  const [rName, setRName] = useState("");
   const [rPhone, setRPhone] = useState("");
-  const [rPass,  setRPass]  = useState("");
+  const [rPass, setRPass] = useState("");
   const [rVType, setRVType] = useState("go");
   const [rPlate, setRPlate] = useState("");
   const [rColor, setRColor] = useState("");
   const [rModel, setRModel] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
+  const [error, setError] = useState("");
 
   const err = (msg) => { setError(msg); setLoading(false); };
 
@@ -45,10 +45,10 @@ export default function LoginPage() {
     try {
       const res = await axios.post(`${BACKEND_URL}/api/auth/user/login`, {
         phone: uPhone.trim(),
-        name:  uName.trim() || undefined
+        name: uName.trim() || undefined
       });
-      localStorage.setItem("bolacabs_token", res.data.token);
-      localStorage.setItem("bolacabs_user",  JSON.stringify(res.data.user));
+      localStorage.setItem("ucab_token", res.data.token);
+      localStorage.setItem("ucab_user", JSON.stringify(res.data.user));
       navigate("/user");
     } catch (e) {
       err(e.response?.data?.message || "Connection failed — make sure you're on the same WiFi");
@@ -62,8 +62,8 @@ export default function LoginPage() {
       const res = await axios.post(`${BACKEND_URL}/api/auth/captain/login`, {
         phone: cPhone, password: cPass
       });
-      localStorage.setItem("bolacabs_token",   res.data.token);
-      localStorage.setItem("bolacabs_user",    JSON.stringify(res.data.captain));
+      localStorage.setItem("ucab_token", res.data.token);
+      localStorage.setItem("ucab_user", JSON.stringify(res.data.captain));
       navigate("/captain");
     } catch (e) {
       err(e.response?.data?.message || "Login failed");
@@ -80,8 +80,8 @@ export default function LoginPage() {
         name: rName, phone: rPhone, password: rPass,
         vehicle: { type: rVType, plate: rPlate, color: rColor, model: rModel }
       });
-      localStorage.setItem("bolacabs_token",   res.data.token);
-      localStorage.setItem("bolacabs_user",    JSON.stringify(res.data.captain));
+      localStorage.setItem("ucab_token", res.data.token);
+      localStorage.setItem("ucab_user", JSON.stringify(res.data.captain));
       navigate("/captain");
     } catch (e) {
       err(e.response?.data?.message || "Registration failed");
@@ -90,7 +90,7 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
-      <div className="login-logo">BolaCabs</div>
+      <div className="login-logo">UCab</div>
       <div className="login-tagline">Your city. Your ride. 🚖</div>
 
       {/* ── Tab switch ──────────────────────────────────────── */}

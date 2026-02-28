@@ -3,7 +3,7 @@ import axios from "axios";
 import BACKEND_URL from "../config";
 
 export default function NotificationsPage() {
-    const stored = JSON.parse(localStorage.getItem("bolacabs_user") || "null");
+    const stored = JSON.parse(localStorage.getItem("ucab_user") || "null");
     const userId = stored?._id;
 
     const [notifications, setNotifications] = useState([]);

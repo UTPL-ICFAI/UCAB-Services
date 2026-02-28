@@ -4,26 +4,26 @@ import axios from "axios";
 import BACKEND_URL from "../config";
 
 const VEHICLE_TYPES = [
-  { id: "go",      label: "UCab Go",    icon: "🚗", desc: "Affordable sedan"  },
-  { id: "premier", label: "Premier",    icon: "🚙", desc: "Comfortable ride"  },
-  { id: "auto",    label: "Auto",       icon: "🛺", desc: "Quick & cheap"     },
-  { id: "bike",    label: "Bike",       icon: "🏍️", desc: "Fastest option"  },
+  { id: "go", label: "UCab Go", icon: "🚗", desc: "Affordable sedan" },
+  { id: "premier", label: "Premier", icon: "🚙", desc: "Comfortable ride" },
+  { id: "auto", label: "Auto", icon: "🛺", desc: "Quick & cheap" },
+  { id: "bike", label: "Bike", icon: "🏍️", desc: "Fastest option" },
 ];
 
 export default function CaptainLoginPage() {
   const navigate = useNavigate();
-  const [mode,    setMode]    = useState("login");   // "login" | "register"
+  const [mode, setMode] = useState("login");   // "login" | "register"
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
+  const [error, setError] = useState("");
 
   // Login fields
   const [lPhone, setLPhone] = useState("");
-  const [lPass,  setLPass]  = useState("");
+  const [lPass, setLPass] = useState("");
 
   // Register fields
-  const [rName,  setRName]  = useState("");
+  const [rName, setRName] = useState("");
   const [rPhone, setRPhone] = useState("");
-  const [rPass,  setRPass]  = useState("");
+  const [rPass, setRPass] = useState("");
   const [rVType, setRVType] = useState("go");
   const [rPlate, setRPlate] = useState("");
   const [rColor, setRColor] = useState("");
@@ -38,8 +38,8 @@ export default function CaptainLoginPage() {
       const res = await axios.post(`${BACKEND_URL}/api/auth/captain/login`, {
         phone: lPhone, password: lPass
       });
-      localStorage.setItem("bolacabs_token", res.data.token);
-      localStorage.setItem("bolacabs_user",  JSON.stringify(res.data.captain));
+      localStorage.setItem("ucab_token", res.data.token);
+      localStorage.setItem("ucab_user", JSON.stringify(res.data.captain));
       navigate("/captain");
     } catch (e) { err(e.response?.data?.message || "Login failed"); }
   };
@@ -53,8 +53,8 @@ export default function CaptainLoginPage() {
         name: rName, phone: rPhone, password: rPass,
         vehicle: { type: rVType, plate: rPlate, color: rColor, model: rModel }
       });
-      localStorage.setItem("bolacabs_token", res.data.token);
-      localStorage.setItem("bolacabs_user",  JSON.stringify(res.data.captain));
+      localStorage.setItem("ucab_token", res.data.token);
+      localStorage.setItem("ucab_user", JSON.stringify(res.data.captain));
       navigate("/captain");
     } catch (e) { err(e.response?.data?.message || "Registration failed"); }
   };
@@ -68,7 +68,7 @@ export default function CaptainLoginPage() {
         <div className="login-role-badge captain-badge">🚗 Captain Portal</div>
 
         <div className="captain-mode-switch">
-          <button className={mode === "login"    ? "active" : ""} onClick={() => { setMode("login");    setError(""); }}>Login</button>
+          <button className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Login</button>
           <button className={mode === "register" ? "active" : ""} onClick={() => { setMode("register"); setError(""); }}>Register</button>
         </div>
 

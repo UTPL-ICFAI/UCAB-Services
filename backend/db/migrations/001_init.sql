@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS rides (
     pickup              JSONB       DEFAULT NULL,   -- { lat, lng, address }
     dropoff             JSONB       DEFAULT NULL,   -- { lat, lng, address }
     fare                NUMERIC     DEFAULT NULL,
-    ride_type           TEXT        NOT NULL DEFAULT 'BolaCab Go',
+    ride_type           TEXT        NOT NULL DEFAULT 'UCab Go',
     captain_socket_id   TEXT        DEFAULT NULL,
     status              TEXT        NOT NULL DEFAULT 'requested',
     scheduled_at        TIMESTAMPTZ DEFAULT NULL,

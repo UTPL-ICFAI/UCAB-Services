@@ -6,8 +6,8 @@ import BACKEND_URL from "../config";
 
 const CaptainPage = () => {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem("bolacabs_user") || "{}");
-  const tkn = localStorage.getItem("bolacabs_token");
+  const user = JSON.parse(localStorage.getItem("ucab_user") || "{}");
+  const tkn = localStorage.getItem("ucab_token");
 
   const socketRef = useRef(null);
   if (!socketRef.current) {
@@ -184,8 +184,8 @@ const CaptainPage = () => {
   };
 
   const logout = () => {
-    localStorage.removeItem("bolacabs_user");
-    localStorage.removeItem("bolacabs_token");
+    localStorage.removeItem("ucab_user");
+    localStorage.removeItem("ucab_token");
     navigate("/");
   };
 

@@ -26,7 +26,7 @@ const poolConfig = process.env.DB_HOST
         port: Number(process.env.DB_PORT) || 5432,
         user: process.env.DB_USER || "postgres",
         password: process.env.DB_PASSWORD || "",
-        database: process.env.DB_NAME || "ucab_db",
+        database: process.env.DB_NAME || "UCab",
         ssl: false,   // local Postgres — no SSL needed
     }
     : {

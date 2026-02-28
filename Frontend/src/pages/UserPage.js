@@ -48,7 +48,7 @@ const FULL = Math.round(window.innerHeight * 0.88);
 
 const UserPage = () => {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem("bolacabs_user") || "{}");
+  const user = JSON.parse(localStorage.getItem("ucab_user") || "{}");
 
   /* ─── Service tab ─────────────────────────────────────────── */
   const [serviceTab, setServiceTab] = useState("ride"); // ride | courier | rental
@@ -256,8 +256,8 @@ const UserPage = () => {
   };
 
   const logout = () => {
-    localStorage.removeItem("bolacabs_user");
-    localStorage.removeItem("bolacabs_token");
+    localStorage.removeItem("ucab_user");
+    localStorage.removeItem("ucab_token");
     navigate("/login/user");
   };
 

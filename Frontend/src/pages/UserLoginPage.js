@@ -5,10 +5,10 @@ import BACKEND_URL from "../config";
 
 export default function UserLoginPage() {
   const navigate = useNavigate();
-  const [phone,   setPhone]   = useState("");
-  const [name,    setName]    = useState("");
+  const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
+  const [error, setError] = useState("");
 
   const handleLogin = async () => {
     if (!phone.trim()) return setError("Please enter your phone number");
@@ -16,10 +16,10 @@ export default function UserLoginPage() {
     try {
       const res = await axios.post(`${BACKEND_URL}/api/auth/user/login`, {
         phone: phone.trim(),
-        name:  name.trim() || undefined,
+        name: name.trim() || undefined,
       });
-      localStorage.setItem("bolacabs_token", res.data.token);
-      localStorage.setItem("bolacabs_user",  JSON.stringify(res.data.user));
+      localStorage.setItem("ucab_token", res.data.token);
+      localStorage.setItem("ucab_user", JSON.stringify(res.data.user));
       navigate("/user");
     } catch (e) {
       setError(e.response?.data?.message || "Connection failed — check your network");
@@ -38,7 +38,7 @@ export default function UserLoginPage() {
         <p>Enter your phone to book a ride instantly</p>
 
         <div className="input-group">
-          <label>👤 Your Name <span style={{color:"#555"}}>(optional)</span></label>
+          <label>👤 Your Name <span style={{ color: "#555" }}>(optional)</span></label>
           <input type="text" placeholder="e.g. Arjun Sharma"
             value={name} onChange={(e) => setName(e.target.value)} />
         </div>
