@@ -131,6 +131,7 @@ const Captain = {
         if (update.isOnline !== undefined) { fields.push(`is_online = $${i++}`); values.push(update.isOnline); }
         if (update.earnings !== undefined) { fields.push(`earnings = $${i++}`); values.push(update.earnings); }
         if (update.totalRides !== undefined) { fields.push(`total_rides = $${i++}`); values.push(update.totalRides); }
+        if (update.rating !== undefined) { fields.push(`rating = $${i++}`); values.push(update.rating); }
 
         // Handle $inc: { earnings: fare, totalRides: 1 }
         if (update.$inc) {

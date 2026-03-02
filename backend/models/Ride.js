@@ -22,6 +22,7 @@ const toDoc = (row) => {
         fare: row.fare !== null ? parseFloat(row.fare) : null,
         rideType: row.ride_type,
         captainSocketId: row.captain_socket_id,
+        riderSocketId: row.rider_socket_id,   // ← which socket requested this ride
         status: row.status,
         scheduledAt: row.scheduled_at,
         paymentMethod: row.payment_method,
@@ -33,13 +34,13 @@ const toDoc = (row) => {
 };
 
 const Ride = {
-    // create({ pickup, dropoff, fare, rideType, paymentMethod, scheduledAt, status })
+    // create({ pickup, dropoff, fare, rideType, paymentMethod, scheduledAt, status, riderSocketId })
     async create(data) {
         const { rows } = await pool.query(
             `INSERT INTO rides
                (pickup, dropoff, fare, ride_type, payment_method, scheduled_at,
-                status, cancellation_fee, cancelled_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                status, cancellation_fee, cancelled_by, rider_socket_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              RETURNING *`,
             [
                 data.pickup ? JSON.stringify(data.pickup) : null,
@@ -51,6 +52,7 @@ const Ride = {
                 data.status ?? "requested",
                 data.cancellationFee ?? 0,
                 data.cancelledBy ?? null,
+                data.riderSocketId ?? null,   // ← store the requesting rider's socket ID
             ]
         );
         return toDoc(rows[0]);

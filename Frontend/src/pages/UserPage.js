@@ -159,6 +159,10 @@ const UserPage = () => {
   /* ─── Socket events ───────────────────────────────────────── */
   const acceptedAt = useRef(null);
   const toastTimer = useRef(null);
+  const currentRideId = useRef(null);   // tracks which rideId belongs to THIS rider
+  const captainIdRef = useRef(null);    // DB id of the accepting captain (for rating)
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [hoveredStar, setHoveredStar] = useState(0);
   const showToast = (msg) => {
     setToast(msg);
     clearTimeout(toastTimer.current);
@@ -176,19 +180,26 @@ const UserPage = () => {
 
 
   useEffect(() => {
+    // ── Server confirms our ride was created and gives us the rideId ──
+    socket.on("ride requested", ({ rideId }) => {
+      currentRideId.current = rideId;
+    });
+
     socket.on("ride accepted", (data) => {
+      // Only respond to the acceptance of OUR ride, not someone else's
+      if (currentRideId.current && data.rideId !== currentRideId.current) return;
+
+      captainIdRef.current = data.captainId || null;  // store for rating submission
       setCurrentRide(data);
       setRideStatus("accepted");
       setCaptainInfo(data.captain || null);
       const generatedOtp = String(Math.floor(1000 + Math.random() * 9000));
       setTripOtp(generatedOtp);
-      // Send OTP to captain so they can verify before starting trip
       socket.emit("rider:share_otp", {
         captainSocketId: data.captainSocketId,
         otp: generatedOtp,
         rideId: data.rideId,
       });
-
       acceptedAt.current = Date.now();
       if (pickup) setCaptainPos({
         lat: pickup.lat + (Math.random() - 0.5) * 0.01,
@@ -196,23 +207,48 @@ const UserPage = () => {
       });
       showToast("🎉 Captain is on the way!");
     });
+
     socket.on("ride completed", () => {
-      setRideStatus("completed");
-      showToast("🏁 Trip completed! Thank you.");
-      setTimeout(() => {
-        setRideStatus("idle");
-        setCurrentRide(null);
-        setCaptainInfo(null);
-        setPickup(null);
-        setDropoff(null);
-        setRouteInfo(null);
-        setSchedConfirmed(false);
-        setDepartureResult(null);
-        setSheetH(PEEK);
-      }, 4000);
+      currentRideId.current = null;
+      setRideStatus("rating");   // show rating modal first, then idle
+      setRatingSubmitted(false);
+      showToast("🏁 Trip completed! Please rate your captain.");
     });
-    return () => { socket.off("ride accepted"); socket.off("ride completed"); };
+    return () => {
+      socket.off("ride requested");
+      socket.off("ride accepted");
+      socket.off("ride completed");
+    };
   }, [pickup]);
+
+  /* ─── Rating helpers ────────────────────────────────────── */
+  const resetAfterRide = () => {
+    setRideStatus("idle");
+    setCurrentRide(null);
+    setCaptainInfo(null);
+    setCaptainPos(null);
+    setPickup(null);
+    setDropoff(null);
+    setRouteInfo(null);
+    setSchedConfirmed(false);
+    setDepartureResult(null);
+    setSheetH(PEEK);
+    captainIdRef.current = null;
+  };
+
+  const submitRating = (stars) => {
+    if (captainIdRef.current) {
+      socket.emit("rate captain", { captainId: captainIdRef.current, rating: stars });
+    }
+    setRatingSubmitted(true);
+    showToast(`⭐ Thanks for rating ${stars} star${stars !== 1 ? "s" : ""} !`);
+    setTimeout(resetAfterRide, 1500);
+  };
+
+  const skipRating = () => {
+    showToast("Ride completed!");
+    resetAfterRide();
+  };
 
   /* ─── Book ride ───────────────────────────────────────────── */
   const requestRide = () => {
@@ -251,6 +287,7 @@ const UserPage = () => {
     setCurrentRide(null);
     setCaptainPos(null);
     acceptedAt.current = null;
+    currentRideId.current = null;
     setSheetH(pickup && dropoff ? MID : PEEK);
     showToast(fee > 0 ? `Cancelled · ₹${fee} fee applies` : "Ride cancelled");
   };
@@ -474,19 +511,70 @@ const UserPage = () => {
         </div>
       )}
 
-      {rideStatus === "completed" && (
+      {rideStatus === "rating" && (
         <div className="trip-sheet accepted-sheet">
           <div className="trip-sheet-inner" style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 64, marginBottom: 12 }}>🏁</div>
-            <h2 style={{ color: "#1db954", marginBottom: 8 }}>Trip Completed!</h2>
-            <p style={{ color: "#888" }}>Thank you for riding with UCab Services</p>
-            <div className="tfare-amount" style={{ marginTop: 16 }}>₹{fare}</div>
-            <div style={{ color: "#666", fontSize: 13, marginTop: 6 }}>
-              {PAY_METHODS.find((p) => p.id === payMethod)?.icon} Pay {PAY_METHODS.find((p) => p.id === payMethod)?.label} to captain
+            <div style={{ fontSize: 56, marginBottom: 8 }}>🏁</div>
+            <h2 style={{ color: "#1db954", marginBottom: 4 }}>Trip Completed!</h2>
+            <p style={{ color: "#888", fontSize: 13, marginBottom: 20 }}>
+              How was your ride with{" "}
+              <strong style={{ color: "#eee" }}>
+                {captainInfo?.name || currentRide?.captainName || "your captain"}
+              </strong>
+              ?
+            </p>
+
+            {/* ── Star rating row ── */}
+            <div style={{ display: "flex", justifyContent: "center", gap: 12, marginBottom: 20 }}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <span
+                  key={star}
+                  onMouseEnter={() => setHoveredStar(star)}
+                  onMouseLeave={() => setHoveredStar(0)}
+                  onClick={() => submitRating(star)}
+                  style={{
+                    fontSize: 40,
+                    cursor: "pointer",
+                    transition: "transform 0.15s",
+                    transform: hoveredStar >= star ? "scale(1.25)" : "scale(1)",
+                    filter: hoveredStar >= star ? "brightness(1.4)" : "brightness(0.6)",
+                  }}
+                >
+                  ⭐
+                </span>
+              ))}
             </div>
+
+            <div style={{ color: "#666", fontSize: 12, marginBottom: 16 }}>
+              Tap a star to rate · your feedback helps improve quality
+            </div>
+
+            {/* Fare summary */}
+            <div className="tfare-amount" style={{ marginTop: 8 }}>₹{fare}</div>
+            <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
+              {PAY_METHODS.find((p) => p.id === payMethod)?.icon}{" "}
+              Pay {PAY_METHODS.find((p) => p.id === payMethod)?.label} to captain
+            </div>
+
+            <button
+              onClick={skipRating}
+              style={{
+                marginTop: 20,
+                background: "transparent",
+                border: "1px solid #444",
+                borderRadius: 10,
+                padding: "10px 24px",
+                color: "#888",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              Skip
+            </button>
           </div>
         </div>
       )}
+
 
       {schedConfirmed && rideStatus === "idle" && (
         <div className="trip-sheet accepted-sheet">

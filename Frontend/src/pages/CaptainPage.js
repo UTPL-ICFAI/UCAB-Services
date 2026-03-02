@@ -48,8 +48,21 @@ const CaptainPage = () => {
       // Register for real-time push notifications
       if (user?._id) socket.emit("notification:register", { userId: user._id });
     });
+    socket.on("captain profile", (profile) => {
+      // Keep React state in sync
+      setEarnings(profile.earnings || 0);
+      setTotalRides(profile.totalRides || 0);
+      // ── Persist to localStorage so values survive a page refresh ──
+      const stored = JSON.parse(localStorage.getItem("ucab_user") || "{}");
+      localStorage.setItem("ucab_user", JSON.stringify({
+        ...stored,
+        earnings: profile.earnings ?? stored.earnings,
+        totalRides: profile.totalRides ?? stored.totalRides,
+        rating: profile.rating ?? stored.rating,
+      }));
+    });
     socket.on("disconnect", () => setConnected(false));
-    return () => { socket.off("connect"); socket.off("disconnect"); };
+    return () => { socket.off("connect"); socket.off("captain profile"); socket.off("disconnect"); };
   }, [socket, tkn]);
 
 
@@ -88,6 +101,9 @@ const CaptainPage = () => {
     socket.on("stats updated", ({ earnings: e, totalRides: t }) => {
       setEarnings(e);
       setTotalRides(t);
+      // ── Sync to localStorage so these survive a page refresh ───
+      const stored = JSON.parse(localStorage.getItem("ucab_user") || "{}");
+      localStorage.setItem("ucab_user", JSON.stringify({ ...stored, earnings: e, totalRides: t }));
     });
     return () => socket.off("stats updated");
   }, [socket]);
@@ -111,10 +127,30 @@ const CaptainPage = () => {
   /* ─── Someone else accepted ───────────────────────────────── */
   useEffect(() => {
     socket.on("ride accepted", (data) => {
+      // Remove this ride card from all captains' lists (the winner already accepted it)
       setRides((prev) => prev.filter((r) => r.rideId !== data.rideId));
       setMapRide((prev) => prev?.rideId === data.rideId ? null : prev);
     });
     return () => socket.off("ride accepted");
+  }, [socket]);
+
+  /* ─── Our own accept was rejected (race — another captain was faster) ── */
+  useEffect(() => {
+    socket.on("ride already taken", ({ rideId }) => {
+      // Roll back the optimistic state set by acceptRide()
+      setAcceptedRide((current) => {
+        if (current?.rideId === rideId) return null;
+        return current;
+      });
+      setMapRide((current) => (current?.rideId === rideId ? null : current));
+      // Reset OTP state that was pre-cleared in acceptRide()
+      setExpectedOtp("");
+      setOtpInput("");
+      setOtpVerified(false);
+      setOtpError(false);
+      showToast("⚠️ Ride already accepted by another captain");
+    });
+    return () => socket.off("ride already taken");
   }, [socket]);
 
   /* ─── Ride completed event ────────────────────────────────── */

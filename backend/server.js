@@ -132,8 +132,12 @@ io.on("connection", (socket) => {
                 rideType: data.rideType || "go",
                 paymentMethod: data.paymentMethod || "cash",
                 scheduledAt: data.scheduledAt || null,
-                status: "requested"
+                status: "requested",
+                riderSocketId: socket.id  // track which socket requested this ride
             });
+
+            // ── Tell the rider what their rideId is so they can filter confirmations
+            socket.emit("ride requested", { rideId: ride._id.toString() });
 
             // Only captains with matching vehicle type receive notification
             io.to(data.rideType || "go").emit("new ride", {
@@ -161,28 +165,58 @@ io.on("connection", (socket) => {
             );
 
             if (!ride) {
-                socket.emit("ride already taken");
+                // Tell the losing captain exactly which rideId was taken so they can clear
+                // any optimistic UI state for that specific ride
+                socket.emit("ride already taken", { rideId });
                 return;
             }
 
-            // Broadcast to everyone: rider gets captain details, other captains remove card
             const captainProfile = await Captain.findOne({ socketId: socket.id })
                 .select("name rating totalRides vehicle");
 
-            io.emit("ride accepted", {
+            const acceptedPayload = {
                 rideId: ride._id.toString(),
                 captainName: captainName || captainProfile?.name || "Your Captain",
                 captainSocketId: socket.id,
+                captainId: captainProfile?._id?.toString() || null,  // ← rider needs this to submit rating
                 captain: captainProfile ? {
                     name: captainProfile.name,
                     rating: captainProfile.rating,
                     totalRides: captainProfile.totalRides,
                     vehicle: captainProfile.vehicle
                 } : null
-            });
+            };
+
+            // ── Notify the specific rider who requested this ride ──────────
+            if (ride.riderSocketId) {
+                io.to(ride.riderSocketId).emit("ride accepted", acceptedPayload);
+            }
+
+            // ── Broadcast ride accepted so all captains remove the card ───
+            // (we keep the same event name so existing captain listeners work)
+            io.emit("ride accepted", acceptedPayload);
+
             console.log(`✅ Ride ${rideId} accepted by ${captainName}`);
         } catch (err) {
             console.error("accept ride error:", err);
+        }
+    });
+
+    // ── Rider rates the captain after ride completes ─────────────
+    socket.on("rate captain", async ({ captainId, rating }) => {
+        try {
+            if (!captainId || !rating || rating < 1 || rating > 5) return;
+            const captain = await Captain.findById(captainId);
+            if (!captain) return;
+            // Weighted rolling average: new_avg = (old_avg * rides + new_rating) / (rides + 1)
+            const rides = captain.totalRides || 1;
+            const newRating = parseFloat(
+                ((captain.rating * rides + rating) / (rides + 1)).toFixed(2)
+            );
+            await Captain.findByIdAndUpdate(captainId, { rating: newRating });
+            console.log(`⭐ Captain ${captainId} rated ${rating} → new avg ${newRating}`);
+        } catch (err) {
+            console.error("rate captain error:", err.message);
         }
     });
 
