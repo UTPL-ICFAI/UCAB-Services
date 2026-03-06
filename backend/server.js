@@ -68,19 +68,28 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/fleet", fleetRoutes);
 app.get("/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
 
-// ── PostgreSQL ───────────────────────────────────────────────
+// ── PostgreSQL + auto-migrate ────────────────────────────────
+const fs = require("fs");
+const path = require("path");
+
 pool.query("SELECT 1")
     .then(() => {
         console.log("✅ PostgreSQL connected");
-        // Quick check: does the users table exist?
         return pool.query("SELECT to_regclass('public.users') AS exists");
     })
-    .then(res => {
+    .then(async (res) => {
         if (!res.rows[0].exists) {
-            console.error("⚠️  WARNING: Table 'users' not found. Please run the migration!");
-        } else {
-            console.log("✅ Database tables verified");
+            console.log("⚠️  Tables not found — running initial migration…");
         }
+        // Run all migrations — each uses IF NOT EXISTS / IF NOT EXISTS so safe to re-run
+        const migrationDir = path.join(__dirname, "db", "migrations");
+        const files = fs.readdirSync(migrationDir).filter(f => f.endsWith(".sql")).sort();
+        for (const file of files) {
+            const sql = fs.readFileSync(path.join(migrationDir, file), "utf8");
+            await pool.query(sql);
+            console.log(`  ✅ migration: ${file}`);
+        }
+        console.log("✅ Database tables verified & up to date");
     })
     .catch((err) => console.error("❌ PostgreSQL error:", err.message));
 

@@ -63,6 +63,7 @@ const User = {
     },
 
     // create({ name, phone, email?, password? })
+    // Uses ON CONFLICT to handle concurrent signups with the same phone
     async create(data) {
         const hashedPassword = data.password
             ? await bcrypt.hash(data.password, 10)
@@ -70,9 +71,18 @@ const User = {
         const { rows } = await pool.query(
             `INSERT INTO users (name, phone, email, password)
              VALUES ($1, $2, $3, $4)
+             ON CONFLICT (phone) DO NOTHING
              RETURNING *`,
             [data.name, data.phone, data.email || null, hashedPassword]
         );
+        // If ON CONFLICT hit, the row already exists — fetch it
+        if (!rows[0]) {
+            const existing = await pool.query(
+                "SELECT * FROM users WHERE phone = $1 LIMIT 1",
+                [data.phone]
+            );
+            return toDoc(existing.rows[0]);
+        }
         return toDoc(rows[0]);
     },
 

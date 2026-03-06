@@ -22,13 +22,12 @@ const poolConfig = {
     database: process.env.DB_NAME || "UCab",
 
     // SSL Configuration: Required for Render PostgreSQL
-    // We enable it if in production or if DATABASE_URL is present.
     ssl: isProduction ? { rejectUnauthorized: false } : false,
 
-    // Pool settings for performance and stability
-    max: 20,              // max number of clients in the pool
+    // Pool settings — tuned for Render free tier (max ~5 connections)
+    max: isProduction ? 5 : 10,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 10000,  // 10s — cloud DBs have higher latency
 };
 
 const pool = new Pool(poolConfig);
