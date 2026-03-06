@@ -230,7 +230,11 @@ const UserPage = () => {
         lat: pickup.lat + (Math.random() - 0.5) * 0.01,
         lng: pickup.lng + (Math.random() - 0.5) * 0.01,
       });
-      showToast("🎉 Captain is on the way!");
+
+      const vehicleInfo = data.captain?.vehicle
+        ? `${data.captain.vehicle.color} ${data.captain.vehicle.model} (${data.captain.vehicle.plate})`
+        : "Your Captain";
+      showToast(`🎉 ${vehicleInfo} is on the way!`);
     });
 
     socket.on("ride completed", () => {
@@ -341,7 +345,22 @@ const UserPage = () => {
   const sendCourier = () => {
     if (!cFrom || !cTo) { showToast("⚠️ Set pickup & delivery address"); return; }
     if (!cName || !cPhone) { showToast("⚠️ Enter receiver name & phone"); return; }
+
+    socket.emit("new ride request", {
+      pickup: { ...cFrom },
+      dropoff: { ...cTo },
+      fare: courierFare,
+      distKm: cRouteInfo?.distKm || 3,
+      rideType: cVehicle,
+      parcelWeight: cWeight,
+      receiverName: cName,
+      receiverPhone: cPhone,
+      userId: user._id || null,
+    });
+
     setCourierStatus("sent");
+    setRideStatus("searching"); // Use the same searching UI
+    setSheetH(PEEK);
     showToast("📦 Courier request sent! Finding a delivery partner…");
   };
 
@@ -349,10 +368,37 @@ const UserPage = () => {
   const rentalVehicle = RENTAL_VEHICLES.find((v) => v.id === rVehicle);
   const driverExtra = rWithDriver ? 100 : 0;
   const rentalFare = rentalVehicle.perHr * rHours + driverExtra;
-  const confirmRental = () => {
+  const [meetingLocation, setMeetingLocation] = useState(null);
+
+  const confirmRental = async () => {
     if (!rLocation) { showToast("⚠️ Set your pickup location"); return; }
-    setRentalStatus("confirmed");
-    showToast(`🚗 ${rentalVehicle.name} rental confirmed for ${rHours} hrs!`);
+    try {
+      const res = await axios.post(`${BACKEND_URL}/api/fleet/bookings/v2`, {
+        bookingType: "VEHICLE_ONLY",
+        clientName: user.name || "Rider",
+        clientPhone: user.phone || "0000000000",
+        clientEmail: user.email || "rider@ucab.com",
+        clientType: "individual",
+        vehicleType: rentalVehicle.name,
+        pickupLocation: rLocation.address,
+        dropLocation: rLocation.address, // Same for rental pickup
+        date: new Date().toISOString(),
+        durationDays: Math.ceil(rHours / 24) || 1, // API expects days for VEHICLE_ONLY
+      });
+
+      setRentalStatus("confirmed");
+      showToast(`🚗 ${rentalVehicle.name} rental confirmed! Provider will contact you.`);
+
+      // Notify parent/rental provider via socket if possible
+      socket.emit("notify:rental_booked", {
+        bookingId: res.data.booking._id,
+        userId: user._id,
+        location: rLocation,
+      });
+
+    } catch (err) {
+      showToast("❌ Failed to book rental. Please try again.");
+    }
   };
 
   /* ─── Misc helpers ────────────────────────────────────────── */
@@ -898,6 +944,18 @@ const UserPage = () => {
                     <p style={{ color: "#666", fontSize: 12, marginTop: 6 }}>
                       📍 Pickup: {rLocation?.address || "Your location"}
                     </p>
+
+                    <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+                      <button className="btn-primary" style={{ flex: 1, background: "#1db954" }}
+                        onClick={() => showToast("💬 Starting chat with provider...")}>
+                        💬 Communicate
+                      </button>
+                      <button className="btn-primary" style={{ flex: 1, background: "#2b6cb0" }}
+                        onClick={() => showToast("📍 Meeting point shared via app!")}>
+                        📍 Meeting Point
+                      </button>
+                    </div>
+
                     <button className="cancel-btn" style={{ marginTop: 16 }}
                       onClick={() => { setRentalStatus("idle"); setRLocation(null); }}>
                       New Rental

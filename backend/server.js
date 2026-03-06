@@ -169,6 +169,11 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on("rental provider online", (data) => {
+        socket.join("rentals");
+        console.log(`Rental Provider [${data.ownerId || 'unknown'}] online -> room [rentals]`);
+    });
+
     // ── User requests a ride ─────────────────────────────────
     socket.on("new ride request", async (data) => {
         try {
@@ -185,6 +190,9 @@ io.on("connection", (socket) => {
                 status: "requested",
                 riderSocketId: socket.id,
                 riderId,
+                parcelWeight: data.parcelWeight || null,
+                receiverName: data.receiverName || null,
+                receiverPhone: data.receiverPhone || null,
             });
 
             // Tell rider what their rideId is so they can filter later events
@@ -200,6 +208,9 @@ io.on("connection", (socket) => {
                 paymentMethod: ride.paymentMethod,
                 scheduledAt: ride.scheduledAt,
                 distKm: data.distKm,
+                parcelWeight: ride.parcelWeight,
+                receiverName: ride.receiverName,
+                receiverPhone: ride.receiverPhone,
             });
             console.log(`📍 Ride ${ride._id} → room [${data.rideType}] (rider: ${riderId})`);
         } catch (err) {
@@ -341,6 +352,13 @@ io.on("connection", (socket) => {
         } catch (err) {
             console.error("complete ride error:", err);
         }
+    });
+
+    /* ── Rental coordination ── */
+    socket.on("notify:rental_booked", (data) => {
+        // Broadcast to all rental providers
+        io.to("rentals").emit("new rental booking", data);
+        console.log(`📡 Rental booked: ${data.bookingId} -> notifying room [rentals]`);
     });
 
     // ── Disconnect ───────────────────────────────────────────

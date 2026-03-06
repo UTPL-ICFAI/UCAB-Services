@@ -32,6 +32,9 @@ const toDoc = (row) => {
         paymentMethod: row.payment_method,
         cancellationFee: parseFloat(row.cancellation_fee),
         cancelledBy: row.cancelled_by,
+        parcelWeight: row.parcel_weight !== null ? parseFloat(row.parcel_weight) : null,
+        receiverName: row.receiver_name,
+        receiverPhone: row.receiver_phone,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     };
@@ -43,8 +46,9 @@ const Ride = {
         const { rows } = await pool.query(
             `INSERT INTO rides
                (pickup, dropoff, fare, ride_type, payment_method, scheduled_at,
-                status, cancellation_fee, cancelled_by, rider_socket_id, rider_id, otp)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                status, cancellation_fee, cancelled_by, rider_socket_id, rider_id, otp,
+                parcel_weight, receiver_name, receiver_phone)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
              RETURNING *`,
             [
                 data.pickup ? JSON.stringify(data.pickup) : null,
@@ -59,6 +63,9 @@ const Ride = {
                 data.riderSocketId ?? null,
                 data.riderId ?? null,
                 data.otp ?? null,
+                data.parcelWeight ?? null,
+                data.receiverName ?? null,
+                data.receiverPhone ?? null,
             ]
         );
         return toDoc(rows[0]);
@@ -85,6 +92,9 @@ const Ride = {
         if (update.cancellationFee !== undefined) { fields.push(`cancellation_fee = $${i++}`); values.push(update.cancellationFee); }
         if (update.riderRating !== undefined) { fields.push(`rider_rating = $${i++}`); values.push(update.riderRating); }
         if (update.otp !== undefined) { fields.push(`otp = $${i++}`); values.push(update.otp); }
+        if (update.parcelWeight !== undefined) { fields.push(`parcel_weight = $${i++}`); values.push(update.parcelWeight); }
+        if (update.receiverName !== undefined) { fields.push(`receiver_name = $${i++}`); values.push(update.receiverName); }
+        if (update.receiverPhone !== undefined) { fields.push(`receiver_phone = $${i++}`); values.push(update.receiverPhone); }
 
         if (!fields.length) return this.findById(id);
 

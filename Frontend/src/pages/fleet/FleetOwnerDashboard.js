@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import io from "socket.io-client";
 import axios from "axios";
 import BACKEND_URL from "../../config";
 
@@ -15,6 +16,9 @@ export default function FleetOwnerDashboard() {
     const [showAddVehicle, setShowAddVehicle] = useState(false);
     const [vForm, setVForm] = useState({ vehicleType: "Car", vehicleNumber: "", driverName: "", driverPhone: "", seatingCapacity: "" });
     const [vMsg, setVMsg] = useState(null);
+    const [toast, setToast] = useState("");
+
+    const socketRef = useRef(null);
 
     useEffect(() => {
         if (!owner) { navigate("/login/fleet"); return; }
@@ -33,6 +37,27 @@ export default function FleetOwnerDashboard() {
         } catch (_) { }
         setLoading(false);
     }, [owner?._id]);
+
+    useEffect(() => {
+        if (!owner?._id) return;
+        if (!socketRef.current) {
+            socketRef.current = io(BACKEND_URL);
+            const socket = socketRef.current;
+            socket.on("connect", () => {
+                socket.emit("rental provider online", { ownerId: owner._id });
+            });
+            socket.on("new rental booking", (data) => {
+                setToast(`🔔 New Rental Booking from ${data.clientName || 'User'}!`);
+                fetchData();
+            });
+        }
+        return () => {
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
+        };
+    }, [owner?._id, fetchData]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -241,6 +266,19 @@ export default function FleetOwnerDashboard() {
                     </>
                 )}
             </div>
+            {toast && (
+                <div style={{
+                    position: "fixed", bottom: 24, right: 24, background: "#1db954", color: "#000",
+                    padding: "12px 20px", borderRadius: 12, fontWeight: 800, boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+                    zIndex: 1000, animation: "slideIn 0.3s ease-out"
+                }}>
+                    {toast}
+                    <button onClick={() => setToast("")} style={{ marginLeft: 12, background: "none", border: "none", cursor: "pointer", fontWeight: 800 }}>✕</button>
+                    <style>{`
+                        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+                    `}</style>
+                </div>
+            )}
         </div>
     );
 }

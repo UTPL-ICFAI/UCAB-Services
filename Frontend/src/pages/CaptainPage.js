@@ -81,7 +81,7 @@ const CaptainPage = () => {
         }));
         setTripHistory(dbTrips);
       })
-      .catch(() => {}); // silently fail — in-session data still shown
+      .catch(() => { }); // silently fail — in-session data still shown
   }, []);
 
 
@@ -578,6 +578,14 @@ const CaptainPage = () => {
                 )}
               </div>
             )}
+            {acceptedRide.parcelWeight && (
+              <div style={{ background: "rgba(29,185,84,0.1)", padding: 10, borderRadius: 8, marginTop: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#1db954", marginBottom: 4 }}>📦 PARCEL DETAILS</div>
+                <div style={{ fontSize: 13, color: "#eee" }}>Weight: <strong>{acceptedRide.parcelWeight} kg</strong></div>
+                <div style={{ fontSize: 13, color: "#eee" }}>Receiver: <strong>{acceptedRide.receiverName}</strong></div>
+                <div style={{ fontSize: 13, color: "#eee" }}>Phone: <strong>{acceptedRide.receiverPhone}</strong></div>
+              </div>
+            )}
             {/* ── OTP Verification (Uber-style) ── */}
             <div style={{
               marginTop: 14,
@@ -754,6 +762,9 @@ const CaptainPage = () => {
                   <span>{ride.rideType}</span>
                   {ride.paymentMethod && <span>{ride.paymentMethod === "cash" ? "💵 Cash" : "📲 UPI"}</span>}
                   {ride.scheduledAt && <span>📅 Scheduled</span>}
+                  {ride.parcelWeight && (
+                    <span style={{ color: "#1db954", fontWeight: 700 }}>📦 {ride.parcelWeight} kg Parcel</span>
+                  )}
                 </div>
                 <div className="ride-card-actions">
                   <button className="accept-btn" onClick={(e) => { e.stopPropagation(); acceptRide(ride); }}>

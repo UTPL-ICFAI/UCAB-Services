@@ -35,6 +35,17 @@ const ROLES = [
         features: ["Register & manage vehicles", "Handle bulk bookings", "Track availability"],
         route: "/login/fleet",
     },
+    {
+        id: "rental",
+        icon: "🔑",
+        title: "I'm a Rental Provider",
+        subtitle: "List & rent your vehicles",
+        gradient: "linear-gradient(135deg, #0d1a1a 0%, #1a2a1a 100%)",
+        accent: "#1db954",
+        glowColor: "rgba(29,185,84,0.25)",
+        features: ["Manage rental fleet", "Communicate with users", "Set meeting locations"],
+        route: "/login/rental",
+    },
 ];
 
 export default function LandingPage() {

@@ -13,6 +13,7 @@ import FleetOwnerDashboard from "./pages/fleet/FleetOwnerDashboard";
 import FleetOwnerRegister from "./pages/fleet/FleetOwnerRegister";
 import FleetVehicleRegister from "./pages/fleet/FleetVehicleRegister";
 import FleetBookingPage from "./pages/fleet/FleetBookingPage";
+import RentalLoginPage from "./pages/RentalLoginPage";
 
 import "./App.css";
 
@@ -44,6 +45,7 @@ function App() {
         <Route path="/login/user" element={<UserLoginPage />} />
         <Route path="/login/captain" element={<CaptainLoginPage />} />
         <Route path="/login/fleet" element={<FleetOwnerLoginPage />} />
+        <Route path="/login/rental" element={<RentalLoginPage />} />
 
         {/* Protected dashboards */}
         <Route path="/user" element={<PrivateRoute expectedRole="user">   <UserPage />    </PrivateRoute>} />
