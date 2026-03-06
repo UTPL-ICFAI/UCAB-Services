@@ -44,6 +44,6 @@ pool.on("error", (err) => {
 
 module.exports = {
     query: (text, params) => pool.query(text, params),
-    connect: () => client.connect(),
+    connect: () => pool.connect(),
     pool // export the pool instance if needed for transactions
 };
