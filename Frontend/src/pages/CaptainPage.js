@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import io from "socket.io-client";
+import axios from "axios";
 import MapView from "../components/MapView";
 import BACKEND_URL from "../config";
 
@@ -45,14 +46,11 @@ const CaptainPage = () => {
     socket.on("connect", () => {
       setConnected(true);
       socket.emit("captain online", { token: tkn });
-      // Register for real-time push notifications
       if (user?._id) socket.emit("notification:register", { userId: user._id });
     });
     socket.on("captain profile", (profile) => {
-      // Keep React state in sync
       setEarnings(profile.earnings || 0);
       setTotalRides(profile.totalRides || 0);
-      // ── Persist to localStorage so values survive a page refresh ──
       const stored = JSON.parse(localStorage.getItem("ucab_user") || "{}");
       localStorage.setItem("ucab_user", JSON.stringify({
         ...stored,
@@ -65,7 +63,26 @@ const CaptainPage = () => {
     return () => { socket.off("connect"); socket.off("captain profile"); socket.off("disconnect"); };
   }, [socket, tkn]);
 
-
+  /* ─── Load trip history from DB on mount ────────────────── */
+  useEffect(() => {
+    if (!user?._id) return;
+    axios.get(`${BACKEND_URL}/api/auth/captain/trips?captainId=${user._id}&limit=100`)
+      .then((res) => {
+        const dbTrips = (res.data.trips || []).map((t) => ({
+          id: t.id,
+          date: new Date(t.date),
+          pickup: t.pickup?.address || "Pickup",
+          dropoff: t.dropoff?.address || "Dropoff",
+          fare: t.fare,
+          distKm: null,
+          rideType: t.rideType,
+          payment: t.payment,
+          riderRating: t.riderRating,
+        }));
+        setTripHistory(dbTrips);
+      })
+      .catch(() => {}); // silently fail — in-session data still shown
+  }, []);
 
 
   const showToast = (msg) => {
@@ -74,12 +91,12 @@ const CaptainPage = () => {
     toastTimer.current = setTimeout(() => setToast(""), 3500);
   };
 
-  /* ─── Real-time notifications (ride booked etc.) ────────── */
+  /* ─── Real-time notifications ───────────────────────────── */
   useEffect(() => {
     socket.on("notification:new", ({ notification }) => {
       if (notification?.message) showToast(`🔔 ${notification.message}`);
     });
-    // Receive OTP from rider side (relayed via server)
+    // OTP relayed from rider (legacy path)
     socket.on("captain:receive_otp", ({ otp }) => {
       setExpectedOtp(otp);
       setOtpInput("");
@@ -87,9 +104,22 @@ const CaptainPage = () => {
       setOtpError(false);
       showToast("🔢 OTP received — ask rider for their code");
     });
+    // Server-side OTP verification result
+    socket.on("otp result", ({ valid, reason }) => {
+      if (valid) {
+        setOtpVerified(true);
+        setOtpError(false);
+        showToast("✅ OTP verified! You can start the ride.");
+      } else {
+        setOtpVerified(false);
+        setOtpError(true);
+        showToast(`❌ ${reason || "Invalid OTP"}`);
+      }
+    });
     return () => {
       socket.off("notification:new");
       socket.off("captain:receive_otp");
+      socket.off("otp result");
     };
   }, [socket]);
 
@@ -204,6 +234,7 @@ const CaptainPage = () => {
       distKm: acceptedRide.distKm,
       rideType: acceptedRide.rideType,
       payment: acceptedRide.paymentMethod || "cash",
+      riderRating: null,
     };
     setTripHistory((prev) => [tripRecord, ...prev]);
     setTotalRides((n) => n + 1);
@@ -378,7 +409,7 @@ const CaptainPage = () => {
             {drawerTab === "history" && (
               <>
                 <div className="drawer-section-title">
-                  Trip History ({tripHistory.length} this session)
+                  Trip History ({tripHistory.length} rides)
                 </div>
                 {tripHistory.length === 0 ? (
                   <div className="empty-state" style={{ paddingTop: 24 }}>
@@ -412,6 +443,9 @@ const CaptainPage = () => {
                         </div>
                         {trip.distKm && (
                           <div className="thc-dist">📏 {trip.distKm} km</div>
+                        )}
+                        {trip.riderRating != null && (
+                          <div className="thc-dist">⭐ Rider rated {trip.riderRating}/5</div>
                         )}
                       </div>
                     ))}
@@ -599,18 +633,27 @@ const CaptainPage = () => {
                     <button
                       onClick={() => {
                         const entered = String(otpInput).trim();
-                        const expected = String(expectedOtp).trim();
                         if (entered.length < 4) {
                           setOtpError(true);
                           showToast("⚠️ Enter all 4 digits");
                           return;
                         }
+                        // Prefer server-side verification (rideId-bound)
+                        if (acceptedRide?.rideId) {
+                          socket.emit("verify otp", {
+                            rideId: acceptedRide.rideId,
+                            otp: entered,
+                          });
+                          // otp result event will set otpVerified
+                          return;
+                        }
+                        // Fallback: client-side check (legacy)
+                        const expected = String(expectedOtp).trim();
                         if (expected && entered === expected) {
                           setOtpVerified(true);
                           setOtpError(false);
                           showToast("✅ OTP verified! Tap Complete to finish.");
                         } else if (!expected) {
-                          // fallback: backend not restarted yet — trust 4-digit entry
                           setOtpVerified(true);
                           setOtpError(false);
                           showToast("✅ OTP accepted");

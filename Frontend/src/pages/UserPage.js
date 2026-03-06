@@ -5,8 +5,6 @@ import MapView from "../components/MapView";
 import LocationSearch from "../components/LocationSearch";
 import BACKEND_URL from "../config";
 
-const socket = io(BACKEND_URL);
-
 /* ─── Constants ─────────────────────────────────────────────── */
 const RIDE_TYPES = [
   { id: "go", name: "UCab Go", icon: "🚗", time: "2 min", base: 30, perKm: 10 },
@@ -49,6 +47,30 @@ const FULL = Math.round(window.innerHeight * 0.88);
 const UserPage = () => {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("ucab_user") || "{}");
+  const tkn = localStorage.getItem("ucab_token");
+
+  // Socket created once per component mount — useRef pattern prevents reconnect leaks
+  const socketRef = useRef(null);
+  if (!socketRef.current) {
+    socketRef.current = io(BACKEND_URL, {
+      auth: { token: tkn },                     // JWT sent in handshake for server-side userId
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 8000,
+      transports: ["websocket", "polling"],
+    });
+  }
+  const socket = socketRef.current;
+
+  // Re-register notification on every reconnect
+  useEffect(() => {
+    const onConnect = () => {
+      if (user?._id) socket.emit("notification:register", { userId: user._id });
+    };
+    socket.on("connect", onConnect);
+    if (socket.connected) onConnect();
+    return () => { socket.off("connect", onConnect); };
+  }, [socket]);
 
   /* ─── Service tab ─────────────────────────────────────────── */
   const [serviceTab, setServiceTab] = useState("ride"); // ride | courier | rental
@@ -169,37 +191,40 @@ const UserPage = () => {
     toastTimer.current = setTimeout(() => setToast(""), 4000);
   };
 
-  /* ── Real-time notification: register userId so server can push to this socket ── */
+  /* ── Notification events ─────────────────────────────────── */
   useEffect(() => {
-    if (user?._id) socket.emit("notification:register", { userId: user._id });
     socket.on("notification:new", ({ notification }) => {
       if (notification?.message) showToast(`🔔 ${notification.message}`);
     });
     return () => socket.off("notification:new");
-  }, []);
-
+  }, [socket]);
 
   useEffect(() => {
-    // ── Server confirms our ride was created and gives us the rideId ──
+    // Server confirms ride was created and gives us the rideId
     socket.on("ride requested", ({ rideId }) => {
       currentRideId.current = rideId;
     });
 
     socket.on("ride accepted", (data) => {
-      // Only respond to the acceptance of OUR ride, not someone else's
+      // Only respond to acceptance of OUR ride
       if (currentRideId.current && data.rideId !== currentRideId.current) return;
 
-      captainIdRef.current = data.captainId || null;  // store for rating submission
+      captainIdRef.current = data.captainId || null;
       setCurrentRide(data);
       setRideStatus("accepted");
       setCaptainInfo(data.captain || null);
-      const generatedOtp = String(Math.floor(1000 + Math.random() * 9000));
-      setTripOtp(generatedOtp);
+
+      // Use server-generated OTP if provided, otherwise generate client-side
+      const otp = data.otp || String(Math.floor(1000 + Math.random() * 9000));
+      setTripOtp(otp);
+
+      // Relay OTP to captain via server (backward compat + direct socket)
       socket.emit("rider:share_otp", {
         captainSocketId: data.captainSocketId,
-        otp: generatedOtp,
+        otp,
         rideId: data.rideId,
       });
+
       acceptedAt.current = Date.now();
       if (pickup) setCaptainPos({
         lat: pickup.lat + (Math.random() - 0.5) * 0.01,
@@ -210,16 +235,23 @@ const UserPage = () => {
 
     socket.on("ride completed", () => {
       currentRideId.current = null;
-      setRideStatus("rating");   // show rating modal first, then idle
+      setRideStatus("rating");
       setRatingSubmitted(false);
       showToast("🏁 Trip completed! Please rate your captain.");
     });
+
+    socket.on("ride error", ({ message }) => {
+      setRideStatus("idle");
+      showToast(`❌ ${message}`);
+    });
+
     return () => {
       socket.off("ride requested");
       socket.off("ride accepted");
       socket.off("ride completed");
+      socket.off("ride error");
     };
-  }, [pickup]);
+  }, [pickup, socket]);
 
   /* ─── Rating helpers ────────────────────────────────────── */
   const resetAfterRide = () => {
@@ -238,7 +270,11 @@ const UserPage = () => {
 
   const submitRating = (stars) => {
     if (captainIdRef.current) {
-      socket.emit("rate captain", { captainId: captainIdRef.current, rating: stars });
+      socket.emit("rate captain", {
+        captainId: captainIdRef.current,
+        rideId: currentRideId.current,
+        rating: stars,
+      });
     }
     setRatingSubmitted(true);
     showToast(`⭐ Thanks for rating ${stars} star${stars !== 1 ? "s" : ""} !`);
@@ -267,6 +303,7 @@ const UserPage = () => {
       fare, distKm: routeInfo?.distKm || 5,
       duration: routeInfo?.durationMin || 15,
       rideType: rideType.id, paymentMethod: payMethod, scheduledAt,
+      userId: user._id || null,   // send userId so server stores it in rides.rider_id
     });
     if (scheduledAt) {
       setSchedConfirmed(true);

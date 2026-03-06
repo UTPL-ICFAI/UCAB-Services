@@ -22,7 +22,11 @@ const toDoc = (row) => {
         fare: row.fare !== null ? parseFloat(row.fare) : null,
         rideType: row.ride_type,
         captainSocketId: row.captain_socket_id,
-        riderSocketId: row.rider_socket_id,   // ← which socket requested this ride
+        riderSocketId: row.rider_socket_id,
+        riderId: row.rider_id,
+        captainId: row.captain_id,
+        otp: row.otp,
+        riderRating: row.rider_rating !== null ? parseFloat(row.rider_rating) : null,
         status: row.status,
         scheduledAt: row.scheduled_at,
         paymentMethod: row.payment_method,
@@ -34,13 +38,13 @@ const toDoc = (row) => {
 };
 
 const Ride = {
-    // create({ pickup, dropoff, fare, rideType, paymentMethod, scheduledAt, status, riderSocketId })
+    // create({ pickup, dropoff, fare, rideType, paymentMethod, scheduledAt, status, riderSocketId, riderId, otp })
     async create(data) {
         const { rows } = await pool.query(
             `INSERT INTO rides
                (pickup, dropoff, fare, ride_type, payment_method, scheduled_at,
-                status, cancellation_fee, cancelled_by, rider_socket_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                status, cancellation_fee, cancelled_by, rider_socket_id, rider_id, otp)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
              RETURNING *`,
             [
                 data.pickup ? JSON.stringify(data.pickup) : null,
@@ -52,7 +56,9 @@ const Ride = {
                 data.status ?? "requested",
                 data.cancellationFee ?? 0,
                 data.cancelledBy ?? null,
-                data.riderSocketId ?? null,   // ← store the requesting rider's socket ID
+                data.riderSocketId ?? null,
+                data.riderId ?? null,
+                data.otp ?? null,
             ]
         );
         return toDoc(rows[0]);
@@ -66,7 +72,7 @@ const Ride = {
         return toDoc(rows[0]);
     },
 
-    // findByIdAndUpdate(id, { status, ... }, opts)
+    // findByIdAndUpdate(id, { status, captainId, riderRating, ... }, opts)
     async findByIdAndUpdate(id, update, _opts = {}) {
         const fields = [];
         const values = [];
@@ -74,8 +80,11 @@ const Ride = {
 
         if (update.status !== undefined) { fields.push(`status = $${i++}`); values.push(update.status); }
         if (update.captainSocketId !== undefined) { fields.push(`captain_socket_id = $${i++}`); values.push(update.captainSocketId); }
+        if (update.captainId !== undefined) { fields.push(`captain_id = $${i++}`); values.push(update.captainId); }
         if (update.cancelledBy !== undefined) { fields.push(`cancelled_by = $${i++}`); values.push(update.cancelledBy); }
         if (update.cancellationFee !== undefined) { fields.push(`cancellation_fee = $${i++}`); values.push(update.cancellationFee); }
+        if (update.riderRating !== undefined) { fields.push(`rider_rating = $${i++}`); values.push(update.riderRating); }
+        if (update.otp !== undefined) { fields.push(`otp = $${i++}`); values.push(update.otp); }
 
         if (!fields.length) return this.findById(id);
 
@@ -122,7 +131,9 @@ const Ride = {
 
             if (update.status !== undefined) { fields.push(`status = $${ui++}`); values.push(update.status); }
             if (update.captainSocketId !== undefined) { fields.push(`captain_socket_id = $${ui++}`); values.push(update.captainSocketId); }
+            if (update.captainId !== undefined) { fields.push(`captain_id = $${ui++}`); values.push(update.captainId); }
             if (update.cancelledBy !== undefined) { fields.push(`cancelled_by = $${ui++}`); values.push(update.cancelledBy); }
+            if (update.otp !== undefined) { fields.push(`otp = $${ui++}`); values.push(update.otp); }
 
             fields.push(`updated_at = NOW()`);
 

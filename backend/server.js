@@ -4,7 +4,8 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
-const pool = require("./config/db");  // PostgreSQL pool
+const crypto = require("crypto");
+const pool = require("./config/db");
 
 const Ride = require("./models/Ride");
 const Captain = require("./models/Captain");
@@ -42,8 +43,16 @@ const corsOptions = {
     credentials: true
 };
 
-// socket.io server
-const io = new Server(server, { cors: corsOptions });
+// socket.io server with reliability tuning
+const io = new Server(server, {
+    cors: corsOptions,
+    pingInterval: 10000,
+    pingTimeout: 30000,
+    connectTimeout: 20000,
+    transports: ["websocket", "polling"],
+    upgradeTimeout: 10000,
+    maxHttpBufferSize: 1e6,
+});
 
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "ucab_secret_2026";
@@ -75,15 +84,33 @@ pool.query("SELECT 1")
     })
     .catch((err) => console.error("❌ PostgreSQL error:", err.message));
 
-// ── Socket.io ────────────────────────────────────────────────
-// Register notification socket (isolated — does not touch existing events)
+// ── Socket.io auth middleware ────────────────────────────────
+// Decodes JWT and attaches userId/userRole to socket.
+// Non-authenticated sockets are still allowed.
+io.use((socket, next) => {
+    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            socket.userId = decoded.id;
+            socket.userRole = decoded.role;
+        } catch (_) { /* invalid token — allow anonymous */ }
+    }
+    next();
+});
+
+// ── Register notification socket (isolated) ───────────────────
 registerNotificationSocket(io);
 
-// Track captain sockets: captainId → { socketId, vehicleType, name }
+// ── captainId → { socketIds: Set, vehicleType, name }
+// Supports multiple devices per captain
 const captainSockets = new Map();
 
 io.on("connection", (socket) => {
-    console.log("🔌 connected:", socket.id);
+    console.log(`🔌 connected: ${socket.id}${socket.userId ? ` (user:${socket.userId})` : ""}`);
+
+    // Auto-join user room so io.to("user:<id>") reaches ALL devices
+    if (socket.userId) socket.join(`user:${socket.userId}`);
 
     // ── Captain comes online after login ────────────────────
     socket.on("captain online", async ({ token }) => {
@@ -100,13 +127,24 @@ io.on("connection", (socket) => {
 
             // Join vehicle-type room so ride requests are filtered correctly
             socket.join(captain.vehicle.type);
-            captainSockets.set(decoded.id, {
-                socketId: socket.id,
-                vehicleType: captain.vehicle.type,
-                name: captain.name
-            });
+            // Join captain-specific room for targeted messages (multi-device)
+            socket.join(`captain:${decoded.id}`);
+            socket.join(`user:${decoded.id}`);
 
-            // Send full profile back to captain's device
+            socket.captainId = decoded.id;
+            socket.vehicleType = captain.vehicle.type;
+            socket.userId = decoded.id;
+
+            if (!captainSockets.has(decoded.id)) {
+                captainSockets.set(decoded.id, {
+                    socketIds: new Set(),
+                    vehicleType: captain.vehicle.type,
+                    name: captain.name
+                });
+            }
+            captainSockets.get(decoded.id).socketIds.add(socket.id);
+
+            // Send full profile back — persists earnings/stats across refresh
             socket.emit("captain profile", {
                 _id: captain._id,
                 name: captain.name,
@@ -125,6 +163,9 @@ io.on("connection", (socket) => {
     // ── User requests a ride ─────────────────────────────────
     socket.on("new ride request", async (data) => {
         try {
+            // Resolve riderId from JWT (socket.userId) or from data payload
+            const riderId = socket.userId || data.userId || null;
+
             const ride = await Ride.create({
                 pickup: data.pickup,
                 dropoff: data.dropoff,
@@ -133,10 +174,11 @@ io.on("connection", (socket) => {
                 paymentMethod: data.paymentMethod || "cash",
                 scheduledAt: data.scheduledAt || null,
                 status: "requested",
-                riderSocketId: socket.id  // track which socket requested this ride
+                riderSocketId: socket.id,
+                riderId,
             });
 
-            // ── Tell the rider what their rideId is so they can filter confirmations
+            // Tell rider what their rideId is so they can filter later events
             socket.emit("ride requested", { rideId: ride._id.toString() });
 
             // Only captains with matching vehicle type receive notification
@@ -147,38 +189,45 @@ io.on("connection", (socket) => {
                 fare: ride.fare,
                 rideType: ride.rideType,
                 paymentMethod: ride.paymentMethod,
-                scheduledAt: ride.scheduledAt
+                scheduledAt: ride.scheduledAt,
+                distKm: data.distKm,
             });
-            console.log(`📍 Ride ${ride._id} → room [${data.rideType}]`);
+            console.log(`📍 Ride ${ride._id} → room [${data.rideType}] (rider: ${riderId})`);
         } catch (err) {
             console.error("new ride request error:", err);
+            socket.emit("ride error", { message: "Could not create ride. Please try again." });
         }
     });
 
-    // ── Captain accepts ride — single-accept lock ────────────
+    // ── Captain accepts ride — atomic single-win ──────────────
     socket.on("accept ride", async ({ rideId, captainId, captainName }) => {
         try {
+            // Atomic DB update — only the first captain to run this wins
             const ride = await Ride.findOneAndUpdate(
                 { _id: rideId, status: "requested" },
-                { status: "accepted", captainSocketId: socket.id },
+                { status: "accepted", captainSocketId: socket.id, captainId },
                 { new: true }
             );
 
             if (!ride) {
-                // Tell the losing captain exactly which rideId was taken so they can clear
-                // any optimistic UI state for that specific ride
                 socket.emit("ride already taken", { rideId });
                 return;
             }
 
             const captainProfile = await Captain.findOne({ socketId: socket.id })
-                .select("name rating totalRides vehicle");
+                .catch(() => null);
+
+            // Generate server-side OTP and store hashed version in DB
+            const otp = String(Math.floor(1000 + Math.random() * 9000));
+            const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+            await Ride.findByIdAndUpdate(rideId, { otp: otpHash });
 
             const acceptedPayload = {
                 rideId: ride._id.toString(),
                 captainName: captainName || captainProfile?.name || "Your Captain",
                 captainSocketId: socket.id,
-                captainId: captainProfile?._id?.toString() || null,  // ← rider needs this to submit rating
+                captainId: captainId || captainProfile?._id?.toString() || null,
+                otp,   // show OTP to rider; captain must ask rider for this code
                 captain: captainProfile ? {
                     name: captainProfile.name,
                     rating: captainProfile.rating,
@@ -187,44 +236,68 @@ io.on("connection", (socket) => {
                 } : null
             };
 
-            // ── Notify the specific rider who requested this ride ──────────
+            // ── Notify rider on ALL their devices via user room ───────────
+            const riderId = ride.riderId;
+            if (riderId) {
+                io.to(`user:${riderId}`).emit("ride accepted", acceptedPayload);
+            }
+            // Fallback to stored socket ID if riderId is not available
             if (ride.riderSocketId) {
                 io.to(ride.riderSocketId).emit("ride accepted", acceptedPayload);
             }
 
-            // ── Broadcast ride accepted so all captains remove the card ───
-            // (we keep the same event name so existing captain listeners work)
-            io.emit("ride accepted", acceptedPayload);
+            // ── Broadcast to ALL captains in vehicle-type room to remove card ──
+            // Use ride.rideType if available, otherwise broadcast to all
+            const targetRoom = ride.rideType || "go";
+            io.to(targetRoom).emit("ride accepted", {
+                rideId: ride._id.toString(),
+                captainName: acceptedPayload.captainName,
+                captainId: acceptedPayload.captainId,
+                captain: acceptedPayload.captain,
+            });
 
-            console.log(`✅ Ride ${rideId} accepted by ${captainName}`);
+            console.log(`✅ Ride ${rideId} accepted by ${captainName} (rider: ${riderId})`);
         } catch (err) {
             console.error("accept ride error:", err);
         }
     });
 
+    // ── OTP verification — captain enters rider's OTP ────────────
+    socket.on("verify otp", async ({ rideId, otp }) => {
+        try {
+            const ride = await Ride.findById(rideId);
+            if (!ride) { socket.emit("otp result", { rideId, valid: false, reason: "Ride not found" }); return; }
+            if (!ride.otp) { socket.emit("otp result", { rideId, valid: true }); return; }
+            const inputHash = crypto.createHash("sha256").update(String(otp)).digest("hex");
+            const valid = inputHash === ride.otp;
+            socket.emit("otp result", { rideId, valid, reason: valid ? null : "Invalid OTP — please try again" });
+            if (valid) console.log(`🔐 OTP verified for ride ${rideId}`);
+        } catch (err) {
+            console.error("verify otp error:", err.message);
+        }
+    });
+
     // ── Rider rates the captain after ride completes ─────────────
-    socket.on("rate captain", async ({ captainId, rating }) => {
+    socket.on("rate captain", async ({ captainId, rideId, rating }) => {
         try {
             if (!captainId || !rating || rating < 1 || rating > 5) return;
             const captain = await Captain.findById(captainId);
             if (!captain) return;
-            // Weighted rolling average: new_avg = (old_avg * rides + new_rating) / (rides + 1)
-            const rides = captain.totalRides || 1;
+            const rides = Math.max(captain.totalRides || 1, 1);
             const newRating = parseFloat(
                 ((captain.rating * rides + rating) / (rides + 1)).toFixed(2)
             );
             await Captain.findByIdAndUpdate(captainId, { rating: newRating });
+            if (rideId) await Ride.findByIdAndUpdate(rideId, { riderRating: rating });
             console.log(`⭐ Captain ${captainId} rated ${rating} → new avg ${newRating}`);
         } catch (err) {
             console.error("rate captain error:", err.message);
         }
     });
 
-    // ── Rider shares OTP with captain (relay) ────────────────
+    // ── Legacy OTP relay (backward compat) ───────────────────────
     socket.on("rider:share_otp", ({ captainSocketId, otp, rideId }) => {
-        if (captainSocketId) {
-            io.to(captainSocketId).emit("captain:receive_otp", { otp, rideId });
-        }
+        if (captainSocketId) io.to(captainSocketId).emit("captain:receive_otp", { otp, rideId });
     });
 
     // ── Captain completes ride ───────────────────────────────
@@ -238,12 +311,21 @@ io.on("connection", (socket) => {
                     { $inc: { earnings: fare || 0, totalRides: 1 } },
                     { new: true }
                 );
-                // Push updated stats back to the captain
-                socket.emit("stats updated", {
-                    earnings: updated.earnings,
-                    totalRides: updated.totalRides
-                });
+                if (updated) {
+                    const statsPayload = { earnings: updated.earnings, totalRides: updated.totalRides };
+                    // Push to ALL captain devices
+                    io.to(`captain:${captainId}`).emit("stats updated", statsPayload);
+                    socket.emit("stats updated", statsPayload);
+                }
             }
+
+            // Notify rider on all their devices
+            const ride = await Ride.findById(rideId).catch(() => null);
+            if (ride?.riderId) {
+                io.to(`user:${ride.riderId}`).emit("ride completed", { rideId });
+            }
+            io.emit("ride completed", { rideId });
+            console.log(`🏁 Ride ${rideId} completed`);
 
             io.emit("ride completed", { rideId });
             console.log(`🏁 Ride ${rideId} completed`);
@@ -253,17 +335,30 @@ io.on("connection", (socket) => {
     });
 
     // ── Disconnect ───────────────────────────────────────────
-    socket.on("disconnect", async () => {
-        console.log("❌ disconnected:", socket.id);
+    socket.on("disconnect", async (reason) => {
+        console.log(`❌ disconnected: ${socket.id} — ${reason || "unknown"}`);
         try {
-            await Captain.findOneAndUpdate(
-                { socketId: socket.id },
-                { isOnline: false, socketId: null }
-            );
-            for (const [id, info] of captainSockets.entries()) {
-                if (info.socketId === socket.id) {
-                    captainSockets.delete(id);
-                    break;
+            const captainId = socket.captainId;
+            if (captainId) {
+                const entry = captainSockets.get(captainId);
+                if (entry) {
+                    entry.socketIds.delete(socket.id);
+                    if (entry.socketIds.size === 0) {
+                        captainSockets.delete(captainId);
+                        await Captain.findByIdAndUpdate(captainId, { isOnline: false, socketId: null });
+                    }
+                }
+            } else {
+                await Captain.findOneAndUpdate(
+                    { socketId: socket.id },
+                    { isOnline: false, socketId: null }
+                );
+                for (const [id, info] of captainSockets.entries()) {
+                    if (info.socketIds?.has(socket.id)) {
+                        info.socketIds.delete(socket.id);
+                        if (info.socketIds.size === 0) captainSockets.delete(id);
+                        break;
+                    }
                 }
             }
         } catch (_) { }
