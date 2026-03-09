@@ -193,6 +193,8 @@ io.on("connection", (socket) => {
                 parcelWeight: data.parcelWeight || null,
                 receiverName: data.receiverName || null,
                 receiverPhone: data.receiverPhone || null,
+                insuranceFee: 1, // Add ₹1 insurance fee
+                hasInsurance: true,
             });
 
             // Tell rider what their rideId is so they can filter later events
@@ -346,12 +348,21 @@ io.on("connection", (socket) => {
             }
             io.emit("ride completed", { rideId });
             console.log(`🏁 Ride ${rideId} completed`);
-
-            io.emit("ride completed", { rideId });
-            console.log(`🏁 Ride ${rideId} completed`);
         } catch (err) {
             console.error("complete ride error:", err);
         }
+    });
+
+    socket.on("sos alert", (data) => {
+        console.warn(`🚨 SOS ALERT from Ride [${data.rideId}]: Rider feels unsafe!`);
+        // Broadcast to admin room (assuming one exists)
+        io.to("admins").emit("sos notification", {
+            rideId: data.rideId,
+            riderId: data.riderId,
+            captainId: data.captainId,
+            location: data.location,
+            timestamp: new Date()
+        });
     });
 
     /* ── Rental coordination ── */

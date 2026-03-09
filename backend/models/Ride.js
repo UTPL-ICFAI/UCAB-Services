@@ -35,6 +35,8 @@ const toDoc = (row) => {
         parcelWeight: row.parcel_weight !== null ? parseFloat(row.parcel_weight) : null,
         receiverName: row.receiver_name,
         receiverPhone: row.receiver_phone,
+        insuranceFee: row.insurance_fee !== null ? parseFloat(row.insurance_fee) : 0,
+        hasInsurance: row.has_insurance || false,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     };
@@ -47,8 +49,9 @@ const Ride = {
             `INSERT INTO rides
                (pickup, dropoff, fare, ride_type, payment_method, scheduled_at,
                 status, cancellation_fee, cancelled_by, rider_socket_id, rider_id, otp,
-                parcel_weight, receiver_name, receiver_phone)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                parcel_weight, receiver_name, receiver_phone,
+                insurance_fee, has_insurance)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
              RETURNING *`,
             [
                 data.pickup ? JSON.stringify(data.pickup) : null,
@@ -66,6 +69,8 @@ const Ride = {
                 data.parcelWeight ?? null,
                 data.receiverName ?? null,
                 data.receiverPhone ?? null,
+                data.insuranceFee ?? 0,
+                data.hasInsurance ?? false
             ]
         );
         return toDoc(rows[0]);
@@ -92,6 +97,8 @@ const Ride = {
         if (update.cancellationFee !== undefined) { fields.push(`cancellation_fee = $${i++}`); values.push(update.cancellationFee); }
         if (update.riderRating !== undefined) { fields.push(`rider_rating = $${i++}`); values.push(update.riderRating); }
         if (update.otp !== undefined) { fields.push(`otp = $${i++}`); values.push(update.otp); }
+        if (update.insuranceFee !== undefined) { fields.push(`insurance_fee = $${i++}`); values.push(update.insuranceFee); }
+        if (update.hasInsurance !== undefined) { fields.push(`has_insurance = $${i++}`); values.push(update.hasInsurance); }
         if (update.parcelWeight !== undefined) { fields.push(`parcel_weight = $${i++}`); values.push(update.parcelWeight); }
         if (update.receiverName !== undefined) { fields.push(`receiver_name = $${i++}`); values.push(update.receiverName); }
         if (update.receiverPhone !== undefined) { fields.push(`receiver_phone = $${i++}`); values.push(update.receiverPhone); }

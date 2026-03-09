@@ -242,6 +242,29 @@ export default function FleetBookingPage() {
     const [cvYear, setCvYear] = useState("");
     const [purpose, setPurpose] = useState("");
 
+    // Multi-location support // added somethng
+    const [nVehicles, setNVehicles] = useState(1);
+    const [locations, setLocations] = useState([{ pickup: "", dropoff: "" }]);
+
+    useEffect(() => {
+        const count = Number(nVehicles) || 1;
+        setLocations((prev) => {
+            const next = [...prev];
+            if (next.length < count) {
+                for (let i = next.length; i < count; i++) {
+                    next.push({ pickup: prev[0]?.pickup || "", dropoff: prev[0]?.dropoff || "" });
+                }
+            } else if (next.length > count) {
+                return next.slice(0, count);
+            }
+            return next;
+        });
+    }, [nVehicles]);
+
+    const updateLoc = (idx, field, val) => {
+        setLocations(prev => prev.map((l, i) => i === idx ? { ...l, [field]: val } : l));
+    };
+
     // Fetch server-side rates on mount for the read-only pricing preview
     useEffect(() => {
         axios.get(`${BACKEND_URL}/api/fleet/rates`)
@@ -295,7 +318,16 @@ export default function FleetBookingPage() {
                 payload = {
                     ...base,
                     vehicleType,
+                    numVehicles: nVehicles,
+                    locations: locations,
                     durationDays: Number(durationDays),
+                };
+            }
+            if (mode === "NORMAL") {
+                payload = {
+                    ...payload,
+                    numVehicles: nVehicles,
+                    locations: locations
                 };
             }
 
@@ -378,25 +410,44 @@ export default function FleetBookingPage() {
                             <div className="fleet-group">
                                 <label>Number of Vehicles</label>
                                 <input
-                                    required type="number" min="1"
+                                    required type="number" min="1" max="10"
                                     placeholder="e.g. 1"
-                                    defaultValue={1}
-                                    onChange={(e) => { /* handled via payload */ }}
+                                    value={nVehicles}
+                                    onChange={(e) => setNVehicles(e.target.value)}
                                 />
                             </div>
                         </div>
+
+                        {/* Multi-location inputs */}
+                        {nVehicles > 1 && (
+                            <div style={{ marginBottom: 20 }}>
+                                <div style={{ color: "#f6ad55", fontWeight: 700, fontSize: 13, marginBottom: 12 }}>
+                                    📍 Vehicle Locations
+                                </div>
+                                {locations.map((loc, idx) => (
+                                    <div key={idx} style={{
+                                        background: "#1a1f27", border: "1px solid #2a3040", borderRadius: 10,
+                                        padding: 12, marginBottom: 10
+                                    }}>
+                                        <div style={{ fontSize: 12, color: "#888", marginBottom: 8, fontWeight: 600 }}>
+                                            Vehicle #{idx + 1}
+                                        </div>
+                                        <div className="fleet-row">
+                                            <div className="fleet-group">
+                                                <input placeholder="Pickup Location" value={loc.pickup}
+                                                    onChange={(e) => updateLoc(idx, "pickup", e.target.value)} />
+                                            </div>
+                                            <div className="fleet-group">
+                                                <input placeholder="Drop Location" value={loc.dropoff}
+                                                    onChange={(e) => updateLoc(idx, "dropoff", e.target.value)} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </>
                 )}
-
-                {/* Pickup / Drop — shown for all modes */}
-                <div className="fleet-group">
-                    <label>Pickup Location</label>
-                    <input required placeholder="e.g. Anna Nagar, Chennai" value={form.pickupLocation} onChange={set("pickupLocation")} />
-                </div>
-                <div className="fleet-group">
-                    <label>Drop Location</label>
-                    <input required placeholder="e.g. Chennai Airport" value={form.dropLocation} onChange={set("dropLocation")} />
-                </div>
 
                 {/* Date */}
                 <div className="fleet-group fleet-group-sm">
@@ -407,6 +458,20 @@ export default function FleetBookingPage() {
                         value={form.date} onChange={set("date")}
                     />
                 </div>
+
+                {/* Fallback locations if only 1 vehicle */}
+                {nVehicles <= 1 && (
+                    <>
+                        <div className="fleet-group">
+                            <label>Pickup Location</label>
+                            <input required placeholder="e.g. Anna Nagar, Chennai" value={form.pickupLocation} onChange={set("pickupLocation")} />
+                        </div>
+                        <div className="fleet-group">
+                            <label>Drop Location</label>
+                            <input required placeholder="e.g. Chennai Airport" value={form.dropLocation} onChange={set("dropLocation")} />
+                        </div>
+                    </>
+                )}
 
                 {/* ── DRIVER_ONLY section ── */}
                 {mode === "DRIVER_ONLY" && (

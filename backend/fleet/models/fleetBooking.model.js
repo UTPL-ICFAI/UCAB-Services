@@ -36,6 +36,7 @@ const toDoc = (row, populated = {}) => {
         durationDays: row.duration_days !== null ? parseFloat(row.duration_days) : null,
         calculatedFare: row.calculated_fare !== null ? parseFloat(row.calculated_fare) : null,
         assignedVehicles: row.assigned_vehicles || [],   // legacy JSONB array
+        locations: row.locations || [], // multi-location fleet support
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     };
@@ -52,9 +53,9 @@ const FleetBooking = {
                assigned_driver_id, assigned_vehicle_id,
                customer_vehicle_details,
                hourly_rate, duration_hours, daily_rate, duration_days, calculated_fare,
-               assigned_vehicles
+               assigned_vehicles, locations
              ) VALUES (
-               $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
+               $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
              ) RETURNING *`,
             [
                 data.clientName,
@@ -79,6 +80,7 @@ const FleetBooking = {
                 data.durationDays ?? null,
                 data.calculatedFare ?? null,
                 JSON.stringify(data.assignedVehicles || []),
+                JSON.stringify(data.locations || []),
             ]
         );
         return toDoc(rows[0]);

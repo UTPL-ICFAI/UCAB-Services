@@ -552,6 +552,18 @@ const UserPage = () => {
                 </div>
               </div>
               <div className="captain-actions">
+                <button className="icon-btn" style={{ background: "#e53e3e" }}
+                  onClick={() => {
+                    socket.emit("sos alert", {
+                      rideId: currentRideId.current,
+                      riderId: user._id,
+                      captainId: captainIdRef.current,
+                      location: pickup
+                    });
+                    showToast("🚨 SOS ALERT SENT! Help is on the way.");
+                  }}>
+                  🚨 SOS
+                </button>
                 <button className="icon-btn">📞</button>
                 <button className="icon-btn">💬</button>
               </div>
@@ -565,8 +577,9 @@ const UserPage = () => {
                   <strong className="plate-number">{captainInfo?.vehicle?.plate || ""}</strong>
                 </div>
               </div>
-              <div className="vehicle-type-pill">
-                {(captainInfo?.vehicle?.type || rideType.id).toUpperCase()}
+              <div className="vehicle-type-pill" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span title="Ride Insured (10L Death/Injury Cover)" style={{ color: "#1db954" }}>🛡️ Insured</span>
+                <span>{(captainInfo?.vehicle?.type || rideType.id).toUpperCase()}</span>
               </div>
             </div>
             <div className="trip-route-summary">
@@ -577,7 +590,10 @@ const UserPage = () => {
             <div className="trip-fare-row">
               <div>
                 <div className="tfare-label">Estimated Fare</div>
-                <div className="tfare-amount">₹{fare}</div>
+                <div className="tfare-amount">₹{fare + 1}</div>
+                <div style={{ fontSize: 11, color: "#1db954", marginTop: 2 }}>
+                  Includes ₹1 Insurance Fee
+                </div>
               </div>
               <div className="tfare-right">
                 <div>{routeInfo?.distKm || "~"} km · {routeInfo?.durationMin || "~"} min</div>
