@@ -35,6 +35,7 @@ const CaptainPage = () => {
   /* ─── Messaging state ────────────────────────────────────── */
   const [msgInput, setMsgInput] = useState("");
   const [rideStartedConfirmed, setRideStartedConfirmed] = useState(false);
+  const [userMessages, setUserMessages] = useState([]); // messages received from rider
 
   /* ─── Account drawer + trip history ─────────────────────── */
   const [showAccount, setShowAccount] = useState(false);
@@ -121,10 +122,16 @@ const CaptainPage = () => {
         showToast(`❌ ${reason || "Invalid OTP"}`);
       }
     });
+    // Message from rider
+    socket.on("user:message", (payload) => {
+      setUserMessages((prev) => [...prev, payload]);
+      showToast(`📩 Rider: ${payload.message}`);
+    });
     return () => {
       socket.off("notification:new");
       socket.off("captain:receive_otp");
       socket.off("otp result");
+      socket.off("user:message");
     };
   }, [socket]);
 
@@ -215,6 +222,7 @@ const CaptainPage = () => {
     setOtpError(false);
     setMsgInput("");
     setRideStartedConfirmed(false);
+    setUserMessages([]);
     showToast("✅ Ride accepted! Head to pickup.");
   };
 
@@ -256,6 +264,7 @@ const CaptainPage = () => {
     setMapRide(null);
     setMsgInput("");
     setRideStartedConfirmed(false);
+    setUserMessages([]);
     showToast("🏁 Ride completed!");
   };
 
@@ -703,19 +712,58 @@ const CaptainPage = () => {
               )}
             </div>
 
-            {/* ── Ride Started Banner (shown after OTP verified) ── */}
+            {/* ── Ride Started Banner + Navigate Button ── */}
             {rideStartedConfirmed && (
               <div style={{
-                display: "flex", alignItems: "center", gap: 10,
                 background: "rgba(29,185,84,0.15)", border: "1.5px solid #1db954",
                 borderRadius: 12, padding: "12px 14px", marginTop: 12,
                 animation: "fadeSlideUp 0.4s ease",
               }}>
-                <span style={{ fontSize: 26 }}>🚗</span>
-                <div>
-                  <div style={{ color: "#1db954", fontWeight: 800, fontSize: 15 }}>Ride Started!</div>
-                  <div style={{ color: "#888", fontSize: 12 }}>Drive safely to the destination.</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <span style={{ fontSize: 26 }}>🚗</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: "#1db954", fontWeight: 800, fontSize: 15 }}>Ride Started!</div>
+                    <div style={{ color: "#888", fontSize: 12 }}>Drive safely to the destination.</div>
+                  </div>
                 </div>
+                {/* Google Maps navigation button */}
+                <a
+                  href={`https://maps.google.com/maps?daddr=${acceptedRide.dropoff?.lat && acceptedRide.dropoff?.lng
+                    ? `${acceptedRide.dropoff.lat},${acceptedRide.dropoff.lng}`
+                    : encodeURIComponent(acceptedRide.dropoff?.address || acceptedRide.dropoff || "destination")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    background: "#1a73e8", color: "#fff", fontWeight: 700, fontSize: 14,
+                    padding: "11px 16px", borderRadius: 10, textDecoration: "none",
+                    border: "none", width: "100%", boxSizing: "border-box",
+                  }}
+                >
+                  📍 Navigate to Destination
+                </a>
+              </div>
+            )}
+
+            {/* ── Messages from Rider ── */}
+            {userMessages.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 11, color: "#888", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
+                  📩 Messages from Rider
+                </div>
+                {userMessages.map((m, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#1a2030", padding: "10px 12px", borderRadius: 12, marginBottom: 6 }}>
+                    <div style={{ width: 28, height: 28, background: "#553c9a", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13, color: "#fff", flexShrink: 0 }}>
+                      R
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, color: "#eee" }}>{m.message}</div>
+                      <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>
+                        {new Date(m.ts).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 

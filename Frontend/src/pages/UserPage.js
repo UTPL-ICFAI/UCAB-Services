@@ -99,12 +99,14 @@ const UserPage = () => {
 
   /* ─── Tip / surge state ────────────────────────────────────── */
   const [tipAmount, setTipAmount] = useState(0);
+  const [displayFare, setDisplayFare] = useState(0); // tracks fare shown to user incl. tip
   const [searchElapsed, setSearchElapsed] = useState(0);
   const searchTimerRef = useRef(null);
 
   /* ─── Messaging / ride-started state ─────────────────────── */
   const [captainMessages, setCaptainMessages] = useState([]);
   const [rideStarted, setRideStarted] = useState(false);
+  const [userMsgInput, setUserMsgInput] = useState("");
 
   /* ─── Account drawer ──────────────────────────────────────── */
   const [showAccount, setShowAccount] = useState(false);
@@ -298,8 +300,10 @@ const UserPage = () => {
     clearInterval(searchTimerRef.current);
     setSearchElapsed(0);
     setTipAmount(0);
+    setDisplayFare(0);
     setCaptainMessages([]);
     setRideStarted(false);
+    setUserMsgInput("");
   };
 
   /* ─── Searching timer ──────────────────────────────────── */
@@ -359,6 +363,7 @@ const UserPage = () => {
     // Store BOTH the params and the original base fare separately
     lastRideParamsRef.current = { ...params, _baseFare: fare };
     setTipAmount(0);
+    setDisplayFare(fare);
 
     socket.emit("new ride request", params);
     if (scheduledAt) {
@@ -379,6 +384,7 @@ const UserPage = () => {
     const updatedParams = { ...lastRideParamsRef.current, fare: baseFare + newTip, _baseFare: baseFare };
     lastRideParamsRef.current = updatedParams;
     setTipAmount(newTip);
+    setDisplayFare(baseFare + newTip);
     socket.emit("new ride request", updatedParams);
     showToast(newTip > 0 ? `💰 Tip added! Captains now see ₹${baseFare + newTip}` : "Tip removed. Searching…");
   };
@@ -396,6 +402,8 @@ const UserPage = () => {
     clearInterval(searchTimerRef.current);
     setSearchElapsed(0);
     setTipAmount(0);
+    setDisplayFare(0);
+    setUserMsgInput("");
     lastRideParamsRef.current = null;
     setSheetH(pickup && dropoff ? MID : PEEK);
     showToast(fee > 0 ? `Cancelled · ₹${fee} fee applies` : "Ride cancelled");
@@ -608,10 +616,10 @@ const UserPage = () => {
             </div>
             <div className="trip-meta-row">
               <span>
-                💰 ₹{fare + tipAmount}
+                💰 ₹{displayFare > 0 ? displayFare : fare}
                 {tipAmount > 0 && (
                   <span style={{ fontSize: 11, color: "#f6ad55", marginLeft: 5, fontWeight: 700 }}>
-                    (₹{fare} + ₹{tipAmount} tip)
+                    (₹{(displayFare || fare) - tipAmount} + ₹{tipAmount} tip)
                   </span>
                 )}
               </span>
@@ -740,9 +748,10 @@ const UserPage = () => {
             <div className="trip-fare-row">
               <div>
                 <div className="tfare-label">Estimated Fare</div>
-                <div className="tfare-amount">₹{fare + 1}</div>
+                <div className="tfare-amount">₹{(displayFare > 0 ? displayFare : fare) + 1}</div>
                 <div style={{ fontSize: 11, color: "#1db954", marginTop: 2 }}>
                   Includes ₹1 Insurance Fee
+                  {tipAmount > 0 && <span style={{ marginLeft: 6, color: "#f6ad55" }}>+ ₹{tipAmount} tip</span>}
                 </div>
               </div>
               <div className="tfare-right">
@@ -753,6 +762,51 @@ const UserPage = () => {
                 <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>
                   Free cancel {CANCEL_FREE_MINS} min · ₹{CANCEL_FEE} after
                 </div>
+              </div>
+            </div>
+            {/* ── Message Captain ── */}
+            <div style={{ marginTop: 12, borderTop: "1px solid #1e1e1e", paddingTop: 12 }}>
+              <div style={{ fontSize: 11, color: "#888", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
+                💬 Message Captain
+              </div>
+              {/* Quick messages */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                {["I'm waiting outside 🏠", "Take the left turn ⇰", "2 min away ⏱️", "Running late, please wait 🙏"].map((qm) => (
+                  <button key={qm}
+                    style={{ padding: "6px 11px", background: "#1a1f27", border: "1px solid #2a3040", borderRadius: 20, color: "#ccc", fontSize: 12, cursor: "pointer" }}
+                    onClick={() => {
+                      if (!currentRideId.current) return;
+                      socket.emit("user:message", { rideId: currentRideId.current, message: qm });
+                      showToast(`📤 Sent: "${qm}"`);
+                    }}>
+                    {qm}
+                  </button>
+                ))}
+              </div>
+              {/* Custom input */}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  type="text" placeholder="Type a message…" value={userMsgInput} maxLength={200}
+                  onChange={(e) => setUserMsgInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && userMsgInput.trim() && currentRideId.current) {
+                      socket.emit("user:message", { rideId: currentRideId.current, message: userMsgInput.trim() });
+                      showToast("📤 Message sent");
+                      setUserMsgInput("");
+                    }
+                  }}
+                  style={{ flex: 1, padding: "10px 12px", background: "#1a1a1a", border: "1.5px solid #333", borderRadius: 10, color: "#fff", fontSize: 13, outline: "none" }}
+                />
+                <button
+                  style={{ padding: "10px 14px", background: "#2b6cb0", border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => {
+                    if (!userMsgInput.trim() || !currentRideId.current) return;
+                    socket.emit("user:message", { rideId: currentRideId.current, message: userMsgInput.trim() });
+                    showToast("📤 Message sent");
+                    setUserMsgInput("");
+                  }}>
+                  Send
+                </button>
               </div>
             </div>
             <button className="cancel-btn" onClick={cancelRide}>Cancel Ride</button>

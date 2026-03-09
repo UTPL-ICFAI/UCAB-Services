@@ -356,6 +356,20 @@ io.on("connection", (socket) => {
         }
     });
 
+    // ── Rider sends a message to the captain ─────────────────────
+    socket.on("user:message", async ({ rideId, message }) => {
+        try {
+            if (!message || !rideId) return;
+            const ride = await Ride.findById(rideId).catch(() => null);
+            if (!ride) return;
+            const payload = { rideId, message: String(message).slice(0, 200), riderName: "Rider", ts: Date.now() };
+            if (ride.captainSocketId) io.to(ride.captainSocketId).emit("user:message", payload);
+            console.log(`💬 Rider msg for ride ${rideId}: "${message}"`);
+        } catch (err) {
+            console.error("user:message error:", err.message);
+        }
+    });
+
     // ── Rider rates the captain after ride completes ─────────────
     socket.on("rate captain", async ({ captainId, rideId, rating }) => {
         try {
