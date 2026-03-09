@@ -7,7 +7,7 @@ import BACKEND_URL from "../config";
 
 /* ─── Constants ─────────────────────────────────────────────── */
 const RIDE_TYPES = [
-  { id: "go", name: "UCab Go", icon: "🚗", time: "2 min", base: 30, perKm: 10 },
+  { id: "go", name: "uride Go", icon: "🚗", time: "2 min", base: 30, perKm: 10 },
   { id: "premier", name: "Premier", icon: "🚙", time: "4 min", base: 60, perKm: 15 },
   { id: "auto", name: "Auto", icon: "🛺", time: "3 min", base: 20, perKm: 7 },
   { id: "bike", name: "Bike", icon: "🏍️", time: "1 min", base: 15, perKm: 5 },
@@ -96,6 +96,11 @@ const UserPage = () => {
   const [arrivalTime, setArrivalTime] = useState("");
   const [breaks, setBreaks] = useState([{ label: "Lunch", mins: 30 }]);
   const [departureResult, setDepartureResult] = useState(null);
+
+  /* ─── Tip / surge state ────────────────────────────────────── */
+  const [tipAmount, setTipAmount] = useState(0);
+  const [searchElapsed, setSearchElapsed] = useState(0);
+  const searchTimerRef = useRef(null);
 
   /* ─── Account drawer ──────────────────────────────────────── */
   const [showAccount, setShowAccount] = useState(false);
@@ -270,7 +275,24 @@ const UserPage = () => {
     setDepartureResult(null);
     setSheetH(PEEK);
     captainIdRef.current = null;
+    clearInterval(searchTimerRef.current);
+    setSearchElapsed(0);
+    setTipAmount(0);
   };
+
+  /* ─── Searching timer ──────────────────────────────────── */
+  useEffect(() => {
+    if (rideStatus === "searching") {
+      setSearchElapsed(0);
+      searchTimerRef.current = setInterval(() => {
+        setSearchElapsed((s) => s + 1);
+      }, 1000);
+    } else {
+      clearInterval(searchTimerRef.current);
+      if (rideStatus !== "searching") setSearchElapsed(0);
+    }
+    return () => clearInterval(searchTimerRef.current);
+  }, [rideStatus]);
 
   const submitRating = (stars) => {
     if (captainIdRef.current) {
@@ -291,6 +313,9 @@ const UserPage = () => {
   };
 
   /* ─── Book ride ───────────────────────────────────────────── */
+  // Store last ride params so tip re-emit can re-use them
+  const lastRideParamsRef = useRef(null);
+
   const requestRide = () => {
     if (!pickup || !dropoff) { showToast("⚠️ Please set pickup & dropoff"); return; }
     if (bookingMode === "schedule" && (!schedDate || !schedTime)) {
@@ -302,13 +327,17 @@ const UserPage = () => {
         ? departureResult.depart.toISOString()
         : null;
 
-    socket.emit("new ride request", {
+    const params = {
       pickup: { ...pickup }, dropoff: { ...dropoff },
       fare, distKm: routeInfo?.distKm || 5,
       duration: routeInfo?.durationMin || 15,
       rideType: rideType.id, paymentMethod: payMethod, scheduledAt,
-      userId: user._id || null,   // send userId so server stores it in rides.rider_id
-    });
+      userId: user._id || null,
+    };
+    lastRideParamsRef.current = params;
+    setTipAmount(0);
+
+    socket.emit("new ride request", params);
     if (scheduledAt) {
       setSchedConfirmed(true);
       showToast(`📅 Scheduled for ${fmtTime(new Date(scheduledAt))}`);
@@ -317,6 +346,16 @@ const UserPage = () => {
       setSheetH(PEEK);
       showToast("🔍 Finding your captain...");
     }
+  };
+
+  /* ─── Apply tip (re-emit ride request with updated fare) ──── */
+  const applyTip = (newTip) => {
+    if (!lastRideParamsRef.current) return;
+    setTipAmount(newTip);
+    const updatedParams = { ...lastRideParamsRef.current, fare: lastRideParamsRef.current.fare + newTip };
+    lastRideParamsRef.current = updatedParams;
+    socket.emit("new ride request", updatedParams);
+    showToast(newTip > 0 ? `💰 Tip added! Searching with ₹${newTip} tip…` : "Tip removed. Searching…");
   };
 
   /* ─── Cancel ride ─────────────────────────────────────────── */
@@ -329,6 +368,10 @@ const UserPage = () => {
     setCaptainPos(null);
     acceptedAt.current = null;
     currentRideId.current = null;
+    clearInterval(searchTimerRef.current);
+    setSearchElapsed(0);
+    setTipAmount(0);
+    lastRideParamsRef.current = null;
     setSheetH(pickup && dropoff ? MID : PEEK);
     showToast(fee > 0 ? `Cancelled · ₹${fee} fee applies` : "Ride cancelled");
   };
@@ -518,19 +561,52 @@ const UserPage = () => {
       {rideStatus === "searching" && (
         <div className="trip-sheet searching-sheet">
           <div className="trip-sheet-inner">
-            <div className="searching-spinner" />
+            <div className="searching-spinner-wrap">
+              <div className="searching-pulse" />
+              <div className="searching-pulse" />
+              <div className="searching-pulse" />
+              <div className="searching-spinner" />
+            </div>
             <h2>Finding your captain…</h2>
-            <p>Matching you with the nearest {rideType.name}</p>
+            <p>
+              Matching you with the nearest {rideType.name}
+              {searchElapsed > 0 && (
+                <> &middot; <span style={{ color: searchElapsed >= 15 ? "#f6ad55" : "#888" }}>
+                  {searchElapsed}s
+                </span></>
+              )}
+            </p>
             <div className="trip-route-summary">
               <div className="trs-row"><span className="trs-dot green" /><span>{pickup?.address || "Pickup"}</span></div>
               <div className="trs-line" />
               <div className="trs-row"><span className="trs-dot red" /><span>{dropoff?.address || "Dropoff"}</span></div>
             </div>
             <div className="trip-meta-row">
-              <span>💰 ₹{fare}</span>
-              <span>�� {routeInfo?.distKm || "~"} km</span>
+              <span>💰 ₹{fare + tipAmount}{tipAmount > 0 && <span style={{ color: "#f6ad55", fontSize: 11, marginLeft: 4 }}>+₹{tipAmount} tip</span>}</span>
+              <span>📍 {routeInfo?.distKm || "~"} km</span>
               <span>⏱ {routeInfo?.durationMin || "~"} min</span>
             </div>
+
+            {/* Tip / surge section — appears after 15 s */}
+            {searchElapsed >= 15 && (
+              <div className="tip-surge-box">
+                <div className="tip-surge-label">
+                  ⚡ No captain yet — add a tip to boost priority
+                </div>
+                <div className="tip-surge-btns">
+                  {[0, 10, 20, 30].map((t) => (
+                    <button
+                      key={t}
+                      className={`tip-btn${tipAmount === t ? " active" : ""}`}
+                      onClick={() => applyTip(t)}
+                    >
+                      {t === 0 ? "No tip" : `+₹${t}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <button className="cancel-btn" onClick={cancelRide}>Cancel</button>
           </div>
         </div>

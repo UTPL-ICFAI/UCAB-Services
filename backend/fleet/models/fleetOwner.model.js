@@ -23,10 +23,13 @@ const toDoc = (row) => {
         email: row.email,
         address: row.address,
         totalVehicles: row.total_vehicles,
+        ownerType: row.owner_type,
         isVerified: row.is_verified,
         insuranceCert: row.insurance_cert,
         driverLicense: row.driver_license,
         ownerAadhaar: row.owner_aadhaar,
+        gstin: row.gstin,
+        businessDoc: row.business_doc,
         password: row.password,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -46,22 +49,29 @@ const FleetOwner = {
                 if (cond.email) { clauses.push(`email = $${i++}`); values.push(cond.email); }
             }
             if (!clauses.length) return null;
+            // Optionally filter by ownerType
+            let typePredicate = "";
+            if (filter.ownerType) { typePredicate = ` AND owner_type = $${i++}`; values.push(filter.ownerType); }
             const { rows } = await pool.query(
-                `SELECT * FROM fleet_owners WHERE ${clauses.join(" OR ")} LIMIT 1`,
+                `SELECT * FROM fleet_owners WHERE (${clauses.join(" OR ")})${typePredicate} LIMIT 1`,
                 values
             );
             return toDoc(rows[0]);
         }
         if (filter.email) {
-            const { rows } = await pool.query(
-                "SELECT * FROM fleet_owners WHERE email = $1 LIMIT 1", [filter.email]
-            );
+            const args = [filter.email];
+            let q = "SELECT * FROM fleet_owners WHERE email = $1";
+            if (filter.ownerType) { q += " AND owner_type = $2"; args.push(filter.ownerType); }
+            q += " LIMIT 1";
+            const { rows } = await pool.query(q, args);
             return toDoc(rows[0]);
         }
         if (filter.phone) {
-            const { rows } = await pool.query(
-                "SELECT * FROM fleet_owners WHERE phone = $1 LIMIT 1", [filter.phone]
-            );
+            const args = [filter.phone];
+            let q = "SELECT * FROM fleet_owners WHERE phone = $1";
+            if (filter.ownerType) { q += " AND owner_type = $2"; args.push(filter.ownerType); }
+            q += " LIMIT 1";
+            const { rows } = await pool.query(q, args);
             return toDoc(rows[0]);
         }
         return null;
@@ -113,8 +123,8 @@ const FleetOwner = {
         const { rows } = await pool.query(
             `INSERT INTO fleet_owners
                (owner_name, company_name, phone, email, address, total_vehicles, password,
-                insurance_cert, driver_license, owner_aadhaar)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                insurance_cert, driver_license, owner_aadhaar, owner_type, gstin, business_doc)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
              RETURNING *`,
             [
                 data.ownerName,
@@ -127,6 +137,9 @@ const FleetOwner = {
                 data.insuranceCert || null,
                 data.driverLicense || null,
                 data.ownerAadhaar || null,
+                data.ownerType || 'fleet',
+                data.gstin || null,
+                data.businessDoc || null,
             ]
         );
         return toDoc(rows[0]);

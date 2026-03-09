@@ -7,6 +7,7 @@ const registerOwner = async (req, res) => {
         const {
             ownerName, companyName, phone, email, address, totalVehicles, password,
             insuranceCert, driverLicense, ownerAadhaar,
+            ownerType, gstin, businessDoc,
         } = req.body;
 
         if (!ownerName || !companyName || !phone || !email || !address || !totalVehicles || !password) {
@@ -17,6 +18,11 @@ const registerOwner = async (req, res) => {
                 message: "Car insurance certificate, driver licence, and Aadhaar card are required",
             });
         }
+        // Fleet owners must also supply GSTIN + business document
+        const resolvedType = ownerType === "rental" ? "rental" : "fleet";
+        if (resolvedType === "fleet" && (!gstin || !businessDoc)) {
+            return res.status(400).json({ message: "GSTIN and business document are required for fleet owner registration" });
+        }
         if (password.length < 6) {
             return res.status(400).json({ message: "Password must be at least 6 characters" });
         }
@@ -26,13 +32,14 @@ const registerOwner = async (req, res) => {
 
         const normalizedEmail = email.toLowerCase().trim();
 
-        // Duplicate check (case-insensitive email)
+        // Duplicate check scoped to the same owner type
         const existing = await FleetOwner.findOne({
-            $or: [{ phone: phone.trim() }, { email: normalizedEmail }]
+            $or: [{ phone: phone.trim() }, { email: normalizedEmail }],
+            ownerType: resolvedType,
         });
         if (existing) {
             const field = existing.phone === phone.trim() ? "phone" : "email";
-            return res.status(409).json({ message: `A fleet owner with this ${field} already exists` });
+            return res.status(409).json({ message: `A ${resolvedType} owner with this ${field} already exists` });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -48,11 +55,14 @@ const registerOwner = async (req, res) => {
             insuranceCert: insuranceCert || null,
             driverLicense: driverLicense || null,
             ownerAadhaar: ownerAadhaar || null,
+            ownerType: resolvedType,
+            gstin: gstin || null,
+            businessDoc: businessDoc || null,
         });
 
         // Don't return password hash to client
         const { password: _pw, ...safeOwner } = owner;
-        res.status(201).json({ message: "Fleet owner registered successfully", owner: safeOwner });
+        res.status(201).json({ message: `${resolvedType === 'rental' ? 'Rental provider' : 'Fleet owner'} registered successfully`, owner: safeOwner });
     } catch (err) {
         console.error("registerOwner error:", err);
         res.status(500).json({ message: "Server error" });
@@ -62,23 +72,34 @@ const registerOwner = async (req, res) => {
 // ── POST /api/fleet/owners/login  (email + password) ─────────
 const loginOwner = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, ownerType } = req.body;
         if (!email || !password) {
             return res.status(400).json({ message: "Email and password are required" });
         }
 
+        const resolvedType = ownerType === "rental" ? "rental" : "fleet";
         const normalizedEmail = email.toLowerCase().trim();
-        const owner = await FleetOwner.findOne({ email: normalizedEmail });
-        if (!owner) {
-            return res.status(404).json({ message: "No fleet owner found with this email. Please register first." });
+
+        // First check if *any* account exists with this email
+        const ownerAny = await FleetOwner.findOne({ email: normalizedEmail });
+        if (!ownerAny) {
+            return res.status(404).json({ message: "No account found with this email. Please register first." });
         }
 
-        const isMatch = await bcrypt.compare(password, owner.password);
+        // Reject if the account belongs to a different portal
+        if (ownerAny.ownerType !== resolvedType) {
+            const portalName = ownerAny.ownerType === "rental" ? "Rental Provider" : "Fleet Owner";
+            return res.status(403).json({
+                message: `This account is registered under the ${portalName} portal. Please use the correct login page.`,
+            });
+        }
+
+        const isMatch = await bcrypt.compare(password, ownerAny.password);
         if (!isMatch) {
             return res.status(401).json({ message: "Incorrect password" });
         }
 
-        const { password: _pw, ...safeOwner } = owner;
+        const { password: _pw, ...safeOwner } = ownerAny;
         res.json({ message: "Login successful", owner: safeOwner });
     } catch (err) {
         console.error("loginOwner error:", err);

@@ -1,0 +1,10 @@
+-- This SQL seed requires a pre-hashed password.
+-- Use the companion script rental_test_seed.js to insert the test account:
+--
+--   cd backend
+--   node db/seeds/rental_test_seed.js
+--
+-- Test credentials:
+--   Portal  : Rental Provider Login (/login/rental)
+--   Email   : rental_test@uride.com
+--   Password: testRental@123

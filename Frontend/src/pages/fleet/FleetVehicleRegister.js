@@ -19,6 +19,8 @@ export default function FleetVehicleRegister() {
         vehicleColor: "", driverName: "", driverPhone: "", seatingCapacity: "",
     });
     const [driverAadhaar, setDriverAadhaar] = useState("");
+    const [vehicleInsurance, setVehicleInsurance] = useState("");
+    const [driverLicense, setDriverLicense] = useState("");
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState(null);
 
@@ -30,16 +32,28 @@ export default function FleetVehicleRegister() {
             setMsg({ type: "error", text: "Driver Aadhaar card is required" });
             return;
         }
+        if (!vehicleInsurance) {
+            setMsg({ type: "error", text: "Vehicle insurance certificate is required" });
+            return;
+        }
+        if (!driverLicense) {
+            setMsg({ type: "error", text: "Driver licence is required" });
+            return;
+        }
         setLoading(true); setMsg(null);
         try {
             const res = await axios.post(`${BACKEND_URL}/api/fleet/vehicles`, {
                 ...form,
                 seatingCapacity: Number(form.seatingCapacity),
                 driverAadhaar,
+                vehicleInsurance,
+                driverLicense,
             });
             setMsg({ type: "success", text: res.data.message });
             setForm({ ownerId: "", vehicleType: "Hatchback", vehicleNumber: "", vehicleColor: "", driverName: "", driverPhone: "", seatingCapacity: "" });
             setDriverAadhaar("");
+            setVehicleInsurance("");
+            setDriverLicense("");
         } catch (err) {
             setMsg({ type: "error", text: err.response?.data?.message || "Failed to add vehicle" });
         } finally { setLoading(false); }
@@ -108,6 +122,22 @@ export default function FleetVehicleRegister() {
                 <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 14 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#c05621", marginBottom: 10 }}>
                         📄 Mandatory Documents
+                    </div>
+                    <div className="fleet-group" style={{ maxWidth: 340 }}>
+                        <label>🛡️ Vehicle Insurance Certificate * (mandatory)</label>
+                        <input type="file" accept="image/*,.pdf"
+                            onChange={async (e) => {
+                                if (e.target.files[0]) setVehicleInsurance(await readFileAsBase64(e.target.files[0]));
+                            }} />
+                        {vehicleInsurance && <span style={{ fontSize: 11, color: "#276749" }}>✓ Uploaded</span>}
+                    </div>
+                    <div className="fleet-group" style={{ maxWidth: 340 }}>
+                        <label>🪪 Driver Licence * (mandatory)</label>
+                        <input type="file" accept="image/*,.pdf"
+                            onChange={async (e) => {
+                                if (e.target.files[0]) setDriverLicense(await readFileAsBase64(e.target.files[0]));
+                            }} />
+                        {driverLicense && <span style={{ fontSize: 11, color: "#276749" }}>✓ Uploaded</span>}
                     </div>
                     <div className="fleet-group" style={{ maxWidth: 340 }}>
                         <label>🪪 Driver Aadhaar Card * (mandatory)</label>

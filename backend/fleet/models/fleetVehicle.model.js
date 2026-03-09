@@ -21,6 +21,8 @@ const toDoc = (row, ownerRow = null) => {
         driverName: row.driver_name,
         driverPhone: row.driver_phone,
         driverAadhaar: row.driver_aadhaar,
+        vehicleInsurance: row.vehicle_insurance,
+        driverLicense: row.driver_license,
         seatingCapacity: row.seating_capacity,
         isAvailable: row.is_available,
         createdAt: row.created_at,
@@ -118,8 +120,8 @@ const FleetVehicle = {
         const { rows } = await pool.query(
             `INSERT INTO fleet_vehicles
                (owner_id, vehicle_type, vehicle_number, vehicle_color, driver_name, driver_phone,
-                driver_aadhaar, seating_capacity)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                driver_aadhaar, vehicle_insurance, driver_license, seating_capacity)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              RETURNING *`,
             [
                 data.ownerId,
@@ -129,6 +131,8 @@ const FleetVehicle = {
                 data.driverName,
                 data.driverPhone,
                 data.driverAadhaar || null,
+                data.vehicleInsurance || null,
+                data.driverLicense || null,
                 data.seatingCapacity,
             ]
         );

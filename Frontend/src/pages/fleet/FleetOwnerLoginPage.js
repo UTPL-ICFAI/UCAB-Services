@@ -3,6 +3,14 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BACKEND_URL from "../../config";
 
+const readFileAsBase64 = (file) =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+
 export default function FleetOwnerLoginPage() {
     const navigate = useNavigate();
     const [tab, setTab] = useState("login");
@@ -17,10 +25,18 @@ export default function FleetOwnerLoginPage() {
     // Register state
     const [form, setForm] = useState({
         ownerName: "", companyName: "", phone: "", email: "",
-        address: "", totalVehicles: "", password: "", confirmPw: "",
+        address: "", totalVehicles: "", password: "", confirmPw: "", gstin: "",
     });
+    const [docs, setDocs] = useState({ insuranceCert: "", driverLicense: "", ownerAadhaar: "", businessDoc: "" });
 
     const set = (f) => (e) => setForm({ ...form, [f]: e.target.value });
+
+    const handleFile = (field) => async (e) => {
+        if (e.target.files[0]) {
+            const b64 = await readFileAsBase64(e.target.files[0]);
+            setDocs((d) => ({ ...d, [field]: b64 }));
+        }
+    };
 
     /* ── Login ── */
     const handleLogin = async (e) => {
@@ -30,6 +46,7 @@ export default function FleetOwnerLoginPage() {
             const res = await axios.post(`${BACKEND_URL}/api/fleet/owners/login`, {
                 email: loginEmail.trim(),
                 password: loginPw,
+                ownerType: "fleet",
             });
             localStorage.setItem("fleet_owner", JSON.stringify(res.data.owner));
             navigate("/fleet/dashboard");
@@ -44,11 +61,24 @@ export default function FleetOwnerLoginPage() {
         setError("");
         if (form.password.length < 6) { setError("Password must be at least 6 characters"); return; }
         if (form.password !== form.confirmPw) { setError("Passwords do not match"); return; }
+        if (!docs.insuranceCert || !docs.driverLicense || !docs.ownerAadhaar) {
+            setError("Car insurance certificate, driver licence, and Aadhaar card are required");
+            return;
+        }
+        if (!form.gstin || !docs.businessDoc) {
+            setError("GSTIN number and business document are required for fleet owners");
+            return;
+        }
         setLoading(true);
         try {
             const { confirmPw: _, ...payload } = form;
             const res = await axios.post(`${BACKEND_URL}/api/fleet/owners`, {
                 ...payload, totalVehicles: Number(payload.totalVehicles),
+                ownerType: "fleet",
+                insuranceCert: docs.insuranceCert,
+                driverLicense: docs.driverLicense,
+                ownerAadhaar: docs.ownerAadhaar,
+                businessDoc: docs.businessDoc,
             });
             localStorage.setItem("fleet_owner", JSON.stringify(res.data.owner));
             navigate("/fleet/dashboard");
@@ -64,7 +94,7 @@ export default function FleetOwnerLoginPage() {
                 <div style={{ textAlign: "center", marginBottom: 24 }}>
                     <div style={{ fontSize: 48, marginBottom: 8 }}>🚌</div>
                     <h2 style={{ color: "#fff", fontWeight: 800, fontSize: 22, margin: 0 }}>Fleet Owner Portal</h2>
-                    <p style={{ color: "#888", fontSize: 13, marginTop: 6 }}>UCab Services — Manage your fleet</p>
+                    <p style={{ color: "#888", fontSize: 13, marginTop: 6 }}>uride services — Manage your fleet</p>
                 </div>
 
                 {/* Tabs */}
@@ -116,7 +146,30 @@ export default function FleetOwnerLoginPage() {
                             <Field label="Email" type="email" value={form.email} onChange={set("email")} placeholder="you@company.com" />
                         </div>
                         <Field label="Address" value={form.address} onChange={set("address")} placeholder="Office/depot address" />
-                        <Field label="Total Vehicles" type="number" value={form.totalVehicles} onChange={set("totalVehicles")} placeholder="e.g. 10" style={{ maxWidth: 160 }} />
+                        <div style={row}>
+                            <Field label="Total Vehicles" type="number" value={form.totalVehicles} onChange={set("totalVehicles")} placeholder="e.g. 10" style={{ maxWidth: 160 }} />
+                            <Field label="GSTIN Number *" value={form.gstin} onChange={set("gstin")} placeholder="22AAAAA0000A1Z5" />
+                        </div>
+
+                        {/* Document uploads */}
+                        <div style={{ marginTop: 4, borderTop: "1px solid #1e2530", paddingTop: 12 }}>
+                            <div style={{ fontSize: 11, color: "#c05621", marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>
+                                📄 Mandatory Documents
+                            </div>
+                            {[
+                                { field: "insuranceCert", label: "🛡️ Car Insurance Certificate *" },
+                                { field: "driverLicense", label: "🪪 Driver Licence *" },
+                                { field: "ownerAadhaar", label: "🪪 Owner Aadhaar Card *" },
+                                { field: "businessDoc", label: "🏢 Business Document * (GST cert / trade licence)" },
+                            ].map(({ field, label }) => (
+                                <div key={field} style={grp}>
+                                    <label style={lbl}>{label}</label>
+                                    <input type="file" accept="image/*,.pdf" onChange={handleFile(field)}
+                                        style={{ ...inp, padding: "8px 10px", color: "#aaa" }} />
+                                    {docs[field] && <span style={{ fontSize: 11, color: "#276749" }}>✓ Uploaded</span>}
+                                </div>
+                            ))}
+                        </div>
 
                         {/* Password section */}
                         <div style={{ marginTop: 4, borderTop: "1px solid #1e2530", paddingTop: 12 }}>

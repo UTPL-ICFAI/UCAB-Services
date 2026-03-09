@@ -46,6 +46,7 @@ export default function RentalLoginPage() {
             const res = await axios.post(`${BACKEND_URL}/api/fleet/owners/login`, {
                 email: loginEmail.trim(),
                 password: loginPw,
+                ownerType: "rental",
             });
             localStorage.setItem("rental_provider", JSON.stringify(res.data.owner));
             navigate("/fleet/dashboard"); // Reusing dashboard for now
@@ -69,6 +70,7 @@ export default function RentalLoginPage() {
             const { confirmPw: _, ...payload } = form;
             const res = await axios.post(`${BACKEND_URL}/api/fleet/owners`, {
                 ...payload, totalVehicles: Number(payload.totalVehicles),
+                ownerType: "rental",
                 insuranceCert: docs.insuranceCert,
                 driverLicense: docs.driverLicense,
                 ownerAadhaar: docs.ownerAadhaar,

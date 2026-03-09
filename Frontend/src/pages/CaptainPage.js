@@ -260,7 +260,7 @@ const CaptainPage = () => {
   const mapDropoff = mapRide?.dropoff || null;
 
   const vehicleLabel = {
-    go: "UCab Go 🚗", premier: "Premier 🚙",
+    go: "uride Go 🚗", premier: "Premier 🚙",
     auto: "Auto 🛺", bike: "Bike 🏍️"
   }[user.vehicle?.type] || "Captain";
 
@@ -287,7 +287,7 @@ const CaptainPage = () => {
 
       {/* ── Top bar ── */}
       <div className="top-bar">
-        <div className="top-bar-logo">UCab <span className="logo-accent">Services</span></div>
+        <div className="top-bar-logo">uride <span className="logo-accent">services</span></div>
         <div className="top-bar-right">
           <div className="vehicle-badge">{vehicleLabel}</div>
           <button className="account-btn" onClick={() => setShowAccount(true)}>
