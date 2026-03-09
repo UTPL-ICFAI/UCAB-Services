@@ -56,7 +56,7 @@ export default function LandingPage() {
             {/* Header */}
             <div style={styles.header}>
                 <div style={styles.logo}>
-                    UCab <span style={styles.logoAccent}>Services</span>
+                    uride <span style={styles.logoAccent}>services</span>
                 </div>
                 <div style={styles.tagline}>Your city, your way</div>
             </div>
@@ -70,7 +70,7 @@ export default function LandingPage() {
 
             {/* Footer */}
             <div style={styles.footer}>
-                Powered by UCab Services · Secure · Real-time · Reliable
+                Powered by uride services · Secure · Real-time · Reliable
             </div>
 
             <style>{`

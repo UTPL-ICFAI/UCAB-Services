@@ -17,8 +17,10 @@ const toDoc = (row, ownerRow = null) => {
         ownerId: row.owner_id,
         vehicleType: row.vehicle_type,
         vehicleNumber: row.vehicle_number,
+        vehicleColor: row.vehicle_color,
         driverName: row.driver_name,
         driverPhone: row.driver_phone,
+        driverAadhaar: row.driver_aadhaar,
         seatingCapacity: row.seating_capacity,
         isAvailable: row.is_available,
         createdAt: row.created_at,
@@ -115,15 +117,18 @@ const FleetVehicle = {
     async create(data) {
         const { rows } = await pool.query(
             `INSERT INTO fleet_vehicles
-               (owner_id, vehicle_type, vehicle_number, driver_name, driver_phone, seating_capacity)
-             VALUES ($1, $2, $3, $4, $5, $6)
+               (owner_id, vehicle_type, vehicle_number, vehicle_color, driver_name, driver_phone,
+                driver_aadhaar, seating_capacity)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING *`,
             [
                 data.ownerId,
                 data.vehicleType,
                 data.vehicleNumber?.toUpperCase(),
+                data.vehicleColor || null,
                 data.driverName,
                 data.driverPhone,
+                data.driverAadhaar || null,
                 data.seatingCapacity,
             ]
         );

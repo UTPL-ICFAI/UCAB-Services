@@ -237,7 +237,7 @@ const createBookingV2 = async (req, res) => {
             selectedVehicle = assignVehicle(vehiclePool);
             if (!selectedVehicle) {
                 return res.status(409).json({
-                    message: `No available ${vehicleType} for VEHICLE_ONLY booking`,
+                    message: `No vehicle found — no ${vehicleType} is currently registered by our rental providers. Please try a different type or check back later.`,
                 });
             }
 

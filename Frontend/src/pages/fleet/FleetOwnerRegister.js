@@ -2,25 +2,51 @@ import React, { useState } from "react";
 import axios from "axios";
 import BACKEND_URL from "../../config";
 
+const readFileAsBase64 = (file) =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+
 export default function FleetOwnerRegister() {
     const [form, setForm] = useState({
         ownerName: "", companyName: "", phone: "",
         email: "", address: "", totalVehicles: "",
+    });
+    const [docs, setDocs] = useState({
+        insuranceCert: "", driverLicense: "", ownerAadhaar: "",
     });
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState(null);  // { type: 'success'|'error', text }
 
     const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
+    const handleFile = (field) => async (e) => {
+        if (e.target.files[0]) {
+            const b64 = await readFileAsBase64(e.target.files[0]);
+            setDocs((d) => ({ ...d, [field]: b64 }));
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!docs.insuranceCert || !docs.driverLicense || !docs.ownerAadhaar) {
+            setMsg({ type: "error", text: "Car insurance certificate, driver licence, and Aadhaar card are required" });
+            return;
+        }
         setLoading(true); setMsg(null);
         try {
             const res = await axios.post(`${BACKEND_URL}/api/fleet/owners`, {
                 ...form, totalVehicles: Number(form.totalVehicles),
+                insuranceCert: docs.insuranceCert,
+                driverLicense: docs.driverLicense,
+                ownerAadhaar: docs.ownerAadhaar,
             });
             setMsg({ type: "success", text: res.data.message });
             setForm({ ownerName: "", companyName: "", phone: "", email: "", address: "", totalVehicles: "" });
+            setDocs({ insuranceCert: "", driverLicense: "", ownerAadhaar: "" });
         } catch (err) {
             setMsg({ type: "error", text: err.response?.data?.message || "Registration failed" });
         } finally { setLoading(false); }
@@ -64,6 +90,30 @@ export default function FleetOwnerRegister() {
                 <div className="fleet-group fleet-group-sm">
                     <label>Total Vehicles in Fleet</label>
                     <input required type="number" min="1" placeholder="e.g. 10" value={form.totalVehicles} onChange={set("totalVehicles")} />
+                </div>
+
+                {/* Mandatory Document Uploads */}
+                <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#c05621", marginBottom: 10 }}>
+                        📄 Mandatory Documents (required for verification)
+                    </div>
+                    <div className="fleet-row">
+                        <div className="fleet-group">
+                            <label>🏷️ Car Insurance Certificate *</label>
+                            <input type="file" accept="image/*,.pdf" onChange={handleFile("insuranceCert")} />
+                            {docs.insuranceCert && <span style={{ fontSize: 11, color: "#276749" }}>✓ Uploaded</span>}
+                        </div>
+                        <div className="fleet-group">
+                            <label>📋 Driver Licence *</label>
+                            <input type="file" accept="image/*,.pdf" onChange={handleFile("driverLicense")} />
+                            {docs.driverLicense && <span style={{ fontSize: 11, color: "#276749" }}>✓ Uploaded</span>}
+                        </div>
+                    </div>
+                    <div className="fleet-group" style={{ maxWidth: 300 }}>
+                        <label>🪪 Owner Aadhaar Card *</label>
+                        <input type="file" accept="image/*,.pdf" onChange={handleFile("ownerAadhaar")} />
+                        {docs.ownerAadhaar && <span style={{ fontSize: 11, color: "#276749" }}>✓ Uploaded</span>}
+                    </div>
                 </div>
 
                 <button className="btn-primary" type="submit" disabled={loading}>

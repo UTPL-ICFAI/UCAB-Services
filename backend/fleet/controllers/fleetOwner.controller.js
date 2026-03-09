@@ -4,10 +4,18 @@ const FleetOwner = require("../models/fleetOwner.model");
 // ── POST /api/fleet/owners  (register) ───────────────────────
 const registerOwner = async (req, res) => {
     try {
-        const { ownerName, companyName, phone, email, address, totalVehicles, password } = req.body;
+        const {
+            ownerName, companyName, phone, email, address, totalVehicles, password,
+            insuranceCert, driverLicense, ownerAadhaar,
+        } = req.body;
 
         if (!ownerName || !companyName || !phone || !email || !address || !totalVehicles || !password) {
             return res.status(400).json({ message: "All fields including password are required" });
+        }
+        if (!insuranceCert || !driverLicense || !ownerAadhaar) {
+            return res.status(400).json({
+                message: "Car insurance certificate, driver licence, and Aadhaar card are required",
+            });
         }
         if (password.length < 6) {
             return res.status(400).json({ message: "Password must be at least 6 characters" });
@@ -37,6 +45,9 @@ const registerOwner = async (req, res) => {
             address: address.trim(),
             totalVehicles: Number(totalVehicles),
             password: hashedPassword,
+            insuranceCert: insuranceCert || null,
+            driverLicense: driverLicense || null,
+            ownerAadhaar: ownerAadhaar || null,
         });
 
         // Don't return password hash to client

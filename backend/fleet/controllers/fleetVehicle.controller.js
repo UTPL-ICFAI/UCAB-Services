@@ -4,11 +4,16 @@ const FleetOwner = require("../models/fleetOwner.model");
 // ── POST /api/fleet/vehicles ──────────────────────────────────
 const addVehicle = async (req, res) => {
     try {
-        const { ownerId, vehicleType, vehicleNumber, driverName, driverPhone, seatingCapacity } =
-            req.body;
+        const {
+            ownerId, vehicleType, vehicleNumber, vehicleColor,
+            driverName, driverPhone, driverAadhaar, seatingCapacity,
+        } = req.body;
 
-        if (!ownerId || !vehicleType || !vehicleNumber || !driverName || !driverPhone || !seatingCapacity) {
-            return res.status(400).json({ message: "All vehicle fields are required" });
+        if (!ownerId || !vehicleType || !vehicleNumber || !vehicleColor ||
+            !driverName || !driverPhone || !driverAadhaar || !seatingCapacity) {
+            return res.status(400).json({
+                message: "All vehicle fields are required, including vehicle colour, number plate, and driver Aadhaar card",
+            });
         }
 
         // Verify owner exists
@@ -27,8 +32,10 @@ const addVehicle = async (req, res) => {
             ownerId,
             vehicleType,
             vehicleNumber,
+            vehicleColor,
             driverName,
             driverPhone,
+            driverAadhaar,
             seatingCapacity: Number(seatingCapacity),
         });
 

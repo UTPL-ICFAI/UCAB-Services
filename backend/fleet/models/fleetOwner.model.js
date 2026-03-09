@@ -24,6 +24,9 @@ const toDoc = (row) => {
         address: row.address,
         totalVehicles: row.total_vehicles,
         isVerified: row.is_verified,
+        insuranceCert: row.insurance_cert,
+        driverLicense: row.driver_license,
+        ownerAadhaar: row.owner_aadhaar,
         password: row.password,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -109,8 +112,9 @@ const FleetOwner = {
     async create(data) {
         const { rows } = await pool.query(
             `INSERT INTO fleet_owners
-               (owner_name, company_name, phone, email, address, total_vehicles, password)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+               (owner_name, company_name, phone, email, address, total_vehicles, password,
+                insurance_cert, driver_license, owner_aadhaar)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              RETURNING *`,
             [
                 data.ownerName,
@@ -120,6 +124,9 @@ const FleetOwner = {
                 data.address,
                 data.totalVehicles,
                 data.password,
+                data.insuranceCert || null,
+                data.driverLicense || null,
+                data.ownerAadhaar || null,
             ]
         );
         return toDoc(rows[0]);

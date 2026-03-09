@@ -85,17 +85,21 @@ router.post("/user/register", async (req, res) => {
 // ============================================================
 router.post("/captain/register", async (req, res) => {
     try {
-        const { name, phone, password, vehicle } = req.body;
+        const { name, phone, password, vehicle, insuranceCert, driverLicense, driverAadhaar } = req.body;
         if (!name || !phone || !password || !vehicle)
             return res.status(400).json({ message: "All fields are required" });
         if (!vehicle.type || !vehicle.plate || !vehicle.color || !vehicle.model)
             return res.status(400).json({ message: "Vehicle details incomplete" });
+        if (!insuranceCert || !driverLicense || !driverAadhaar)
+            return res.status(400).json({
+                message: "Car insurance certificate, driver licence, and Aadhaar card are required",
+            });
 
         const existing = await Captain.findOne({ phone });
         if (existing)
             return res.status(409).json({ message: "Phone already registered" });
 
-        const captain = await Captain.create({ name, phone, password, vehicle });
+        const captain = await Captain.create({ name, phone, password, vehicle, insuranceCert, driverLicense, driverAadhaar });
         const token = signToken({ id: captain._id, role: "captain" });
 
         res.status(201).json({

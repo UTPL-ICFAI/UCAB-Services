@@ -62,7 +62,7 @@ export default function UserLoginPage() {
 
   return (
     <div className="login-page">
-      <div className="login-logo">UCab <span className="logo-accent">Services</span></div>
+      <div className="login-logo">uride <span className="logo-accent">services</span></div>
       <div className="login-tagline">Your city ride, simplified 🚖</div>
 
       <div className="login-card">

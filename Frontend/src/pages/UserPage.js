@@ -397,7 +397,12 @@ const UserPage = () => {
       });
 
     } catch (err) {
-      showToast("❌ Failed to book rental. Please try again.");
+      const serverMsg = err.response?.data?.message || "";
+      if (serverMsg.toLowerCase().includes("no available") || serverMsg.toLowerCase().includes("no vehicle")) {
+        showToast("🚗 No vehicle found — no rental vehicles of this type are registered with us yet. Please try a different type or check back later.");
+      } else {
+        showToast(`❌ ${serverMsg || "Failed to book rental. Please try again."}`);
+      }
     }
   };
 
@@ -426,7 +431,7 @@ const UserPage = () => {
 
       {/* Top bar */}
       <div className="top-bar">
-        <div className="top-bar-logo">UCab <span className="logo-accent">Services</span></div>
+        <div className="top-bar-logo">uride <span className="logo-accent">services</span></div>
         <div className="top-bar-right" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {/* ── New feature nav links ── */}
           <button
@@ -842,10 +847,17 @@ const UserPage = () => {
                     <div className="fare-summary-row">
                       <div>
                         <div style={{ fontSize: 13, color: "#888" }}>Estimated fare</div>
-                        <div className="fare-amount">₹{fare}</div>
+                        <div className="fare-amount">₹{fare + 1}</div>
                         <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>
                           {routeInfo?.distKm} km · {routeInfo?.durationMin} min ·{" "}
                           {PAY_METHODS.find((p) => p.id === payMethod)?.icon} {PAY_METHODS.find((p) => p.id === payMethod)?.label}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#1db954", marginTop: 3, display: "flex", alignItems: "center", gap: 4 }}>
+                          🛡️ Includes ₹1 insurance fee
+                          <span title="A ₹1 insurance fee is collected to provide you with a 10 Lakh accident and injury cover for the duration of your trip. This protects both you and the captain."
+                            style={{ cursor: "help", background: "#1a2a1a", borderRadius: 10, padding: "0 6px", fontSize: 10, border: "1px solid #1db954" }}>
+                            ? Why
+                          </span>
                         </div>
                       </div>
                       <button className="book-btn-inline" onClick={requestRide}>

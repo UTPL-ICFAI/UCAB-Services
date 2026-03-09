@@ -29,6 +29,19 @@ export default function CaptainLoginPage() {
   const [rColor, setRColor] = useState("");
   const [rModel, setRModel] = useState("");
 
+  // Document uploads (stored as base64 data URLs)
+  const [rInsuranceCert, setRInsuranceCert] = useState("");
+  const [rDriverLicense, setRDriverLicense] = useState("");
+  const [rDriverAadhaar, setRDriverAadhaar] = useState("");
+
+  const readFileAsBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
   const err = (msg) => { setError(msg); setLoading(false); };
 
   const handleLogin = async () => {
@@ -47,11 +60,17 @@ export default function CaptainLoginPage() {
   const handleRegister = async () => {
     if (!rName || !rPhone || !rPass || !rPlate || !rColor || !rModel)
       return err("Please fill all fields");
+    if (!rInsuranceCert) return err("Car insurance certificate is required");
+    if (!rDriverLicense) return err("Driver licence is required");
+    if (!rDriverAadhaar) return err("Driver Aadhaar card is required");
     setError(""); setLoading(true);
     try {
       const res = await axios.post(`${BACKEND_URL}/api/auth/captain/register`, {
         name: rName, phone: rPhone, password: rPass,
-        vehicle: { type: rVType, plate: rPlate, color: rColor, model: rModel }
+        vehicle: { type: rVType, plate: rPlate, color: rColor, model: rModel },
+        insuranceCert: rInsuranceCert,
+        driverLicense: rDriverLicense,
+        driverAadhaar: rDriverAadhaar,
       });
       localStorage.setItem("ucab_token", res.data.token);
       localStorage.setItem("ucab_user", JSON.stringify(res.data.captain));
@@ -61,7 +80,7 @@ export default function CaptainLoginPage() {
 
   return (
     <div className="login-page">
-      <div className="login-logo">UCab <span className="logo-accent">Services</span></div>
+      <div className="login-logo">uride <span className="logo-accent">services</span></div>
       <div className="login-tagline">Start earning with every trip 🚗</div>
 
       <div className="login-card">
@@ -146,6 +165,37 @@ export default function CaptainLoginPage() {
               <label>🚗 Vehicle Model</label>
               <input type="text" placeholder="e.g. Maruti Swift"
                 value={rModel} onChange={(e) => setRModel(e.target.value)} />
+            </div>
+
+            {/* ── Mandatory Document Uploads ── */}
+            <div style={{ marginTop: 8, borderTop: "1px solid #333", paddingTop: 14 }}>
+              <div style={{ fontSize: 12, color: "#f6ad55", fontWeight: 700, marginBottom: 10, letterSpacing: 0.5 }}>
+                📄 Mandatory Documents (required for verification)
+              </div>
+              <div className="input-group">
+                <label>🏷️ Car Insurance Certificate *</label>
+                <input type="file" accept="image/*,.pdf"
+                  onChange={async (e) => {
+                    if (e.target.files[0]) setRInsuranceCert(await readFileAsBase64(e.target.files[0]));
+                  }} />
+                {rInsuranceCert && <span style={{ fontSize: 11, color: "#1db954" }}>✓ Uploaded</span>}
+              </div>
+              <div className="input-group">
+                <label>📋 Driver Licence *</label>
+                <input type="file" accept="image/*,.pdf"
+                  onChange={async (e) => {
+                    if (e.target.files[0]) setRDriverLicense(await readFileAsBase64(e.target.files[0]));
+                  }} />
+                {rDriverLicense && <span style={{ fontSize: 11, color: "#1db954" }}>✓ Uploaded</span>}
+              </div>
+              <div className="input-group">
+                <label>🪪 Driver Aadhaar Card *</label>
+                <input type="file" accept="image/*,.pdf"
+                  onChange={async (e) => {
+                    if (e.target.files[0]) setRDriverAadhaar(await readFileAsBase64(e.target.files[0]));
+                  }} />
+                {rDriverAadhaar && <span style={{ fontSize: 11, color: "#1db954" }}>✓ Uploaded</span>}
+              </div>
             </div>
 
             {error && <div className="login-error">{error}</div>}

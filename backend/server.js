@@ -57,6 +57,18 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "ucab_secret_2026";
 
+// ── Haversine distance (km) between two lat/lng points ───────────
+function haversineKm(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lng2 - lng1);
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 
 // ── Middleware ───────────────────────────────────────────────
 app.use(cors(corsOptions));
@@ -139,6 +151,10 @@ io.on("connection", (socket) => {
             // Join captain-specific room for targeted messages (multi-device)
             socket.join(`captain:${decoded.id}`);
             socket.join(`user:${decoded.id}`);
+            // Join verified room if captain is verified (for intercity rides)
+            if (captain.isVerified) {
+                socket.join(`${captain.vehicle.type}_verified`);
+            }
 
             socket.captainId = decoded.id;
             socket.vehicleType = captain.vehicle.type;
@@ -200,8 +216,19 @@ io.on("connection", (socket) => {
             // Tell rider what their rideId is so they can filter later events
             socket.emit("ride requested", { rideId: ride._id.toString() });
 
-            // Only captains with matching vehicle type receive notification
-            io.to(data.rideType || "go").emit("new ride", {
+            // Determine intercity: >= 50 km requires a verified captain
+            const distKm =
+                data.distKm ||
+                (data.pickup?.lat && data.dropoff?.lat
+                    ? haversineKm(data.pickup.lat, data.pickup.lng, data.dropoff.lat, data.dropoff.lng)
+                    : 0);
+            const isIntercity = distKm >= 50;
+            const rideRoom = isIntercity
+                ? `${data.rideType || "go"}_verified`
+                : data.rideType || "go";
+
+            // Only captains with matching vehicle type (and verified for intercity) receive notification
+            io.to(rideRoom).emit("new ride", {
                 rideId: ride._id.toString(),
                 pickup: ride.pickup,
                 dropoff: ride.dropoff,
@@ -214,7 +241,7 @@ io.on("connection", (socket) => {
                 receiverName: ride.receiverName,
                 receiverPhone: ride.receiverPhone,
             });
-            console.log(`📍 Ride ${ride._id} → room [${data.rideType}] (rider: ${riderId})`);
+            console.log(`📍 Ride ${ride._id} → room [${rideRoom}]${isIntercity ? " (intercity — verified captains only)" : ""} (rider: ${riderId})`);
         } catch (err) {
             console.error("new ride request error:", err);
             socket.emit("ride error", { message: "Could not create ride. Please try again." });
@@ -269,9 +296,16 @@ io.on("connection", (socket) => {
             }
 
             // ── Broadcast to ALL captains in vehicle-type room to remove card ──
-            // Use ride.rideType if available, otherwise broadcast to all
+            // Emit to both base room and verified room so every captain who saw the ride
+            // is informed that it has been taken.
             const targetRoom = ride.rideType || "go";
             io.to(targetRoom).emit("ride accepted", {
+                rideId: ride._id.toString(),
+                captainName: acceptedPayload.captainName,
+                captainId: acceptedPayload.captainId,
+                captain: acceptedPayload.captain,
+            });
+            io.to(`${targetRoom}_verified`).emit("ride accepted", {
                 rideId: ride._id.toString(),
                 captainName: acceptedPayload.captainName,
                 captainId: acceptedPayload.captainId,

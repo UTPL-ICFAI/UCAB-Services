@@ -3,13 +3,22 @@ import axios from "axios";
 import BACKEND_URL from "../../config";
 import { FleetStyles } from "./FleetOwnerRegister";
 
-const VEHICLE_TYPES = ["Car", "Bus", "Van"];
+const VEHICLE_TYPES = ["Hatchback", "Sedan", "SUV", "Bike", "Car", "Van", "Bus"];
+
+const readFileAsBase64 = (file) =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
 
 export default function FleetVehicleRegister() {
     const [form, setForm] = useState({
-        ownerId: "", vehicleType: "Car", vehicleNumber: "",
-        driverName: "", driverPhone: "", seatingCapacity: "",
+        ownerId: "", vehicleType: "Hatchback", vehicleNumber: "",
+        vehicleColor: "", driverName: "", driverPhone: "", seatingCapacity: "",
     });
+    const [driverAadhaar, setDriverAadhaar] = useState("");
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState(null);
 
@@ -17,13 +26,20 @@ export default function FleetVehicleRegister() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!driverAadhaar) {
+            setMsg({ type: "error", text: "Driver Aadhaar card is required" });
+            return;
+        }
         setLoading(true); setMsg(null);
         try {
             const res = await axios.post(`${BACKEND_URL}/api/fleet/vehicles`, {
-                ...form, seatingCapacity: Number(form.seatingCapacity),
+                ...form,
+                seatingCapacity: Number(form.seatingCapacity),
+                driverAadhaar,
             });
             setMsg({ type: "success", text: res.data.message });
-            setForm({ ownerId: "", vehicleType: "Car", vehicleNumber: "", driverName: "", driverPhone: "", seatingCapacity: "" });
+            setForm({ ownerId: "", vehicleType: "Hatchback", vehicleNumber: "", vehicleColor: "", driverName: "", driverPhone: "", seatingCapacity: "" });
+            setDriverAadhaar("");
         } catch (err) {
             setMsg({ type: "error", text: err.response?.data?.message || "Failed to add vehicle" });
         } finally { setLoading(false); }
@@ -44,11 +60,15 @@ export default function FleetVehicleRegister() {
 
                 <div className="fleet-group">
                     <label>Vehicle Type</label>
-                    <div style={{ display: "flex", gap: 10 }}>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                         {VEHICLE_TYPES.map((t) => (
                             <label key={t} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontWeight: form.vehicleType === t ? 700 : 400 }}>
                                 <input type="radio" value={t} checked={form.vehicleType === t} onChange={set("vehicleType")} />
-                                {t === "Car" ? "🚗" : t === "Bus" ? "🚌" : "🚐"} {t}
+                                {t === "Car" || t === "Hatchback" || t === "Sedan" ? "🚗"
+                                    : t === "SUV" ? "🚙"
+                                    : t === "Bus" ? "🚌"
+                                    : t === "Van" ? "🚐"
+                                    : "🏍️"} {t}
                             </label>
                         ))}
                     </div>
@@ -56,12 +76,20 @@ export default function FleetVehicleRegister() {
 
                 <div className="fleet-row">
                     <div className="fleet-group">
-                        <label>Vehicle Number</label>
-                        <input required placeholder="TN01AB1234" value={form.vehicleNumber} onChange={(e) => setForm({ ...form, vehicleNumber: e.target.value.toUpperCase() })} />
+                        <label>🔖 Number Plate * (mandatory)</label>
+                        <input required placeholder="TN01AB1234" value={form.vehicleNumber}
+                            onChange={(e) => setForm({ ...form, vehicleNumber: e.target.value.toUpperCase() })} />
                     </div>
                     <div className="fleet-group">
+                        <label>🎨 Vehicle Colour * (mandatory)</label>
+                        <input required placeholder="e.g. White" value={form.vehicleColor} onChange={set("vehicleColor")} />
+                    </div>
+                </div>
+
+                <div className="fleet-row">
+                    <div className="fleet-group">
                         <label>Seating Capacity</label>
-                        <input required type="number" min="1" placeholder="e.g. 12" value={form.seatingCapacity} onChange={set("seatingCapacity")} />
+                        <input required type="number" min="1" placeholder="e.g. 5" value={form.seatingCapacity} onChange={set("seatingCapacity")} />
                     </div>
                 </div>
 
@@ -73,6 +101,21 @@ export default function FleetVehicleRegister() {
                     <div className="fleet-group">
                         <label>Driver Phone</label>
                         <input required type="tel" placeholder="9876543210" value={form.driverPhone} onChange={set("driverPhone")} />
+                    </div>
+                </div>
+
+                {/* Mandatory Document Upload */}
+                <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#c05621", marginBottom: 10 }}>
+                        📄 Mandatory Documents
+                    </div>
+                    <div className="fleet-group" style={{ maxWidth: 340 }}>
+                        <label>🪪 Driver Aadhaar Card * (mandatory)</label>
+                        <input type="file" accept="image/*,.pdf"
+                            onChange={async (e) => {
+                                if (e.target.files[0]) setDriverAadhaar(await readFileAsBase64(e.target.files[0]));
+                            }} />
+                        {driverAadhaar && <span style={{ fontSize: 11, color: "#276749" }}>✓ Uploaded</span>}
                     </div>
                 </div>
 

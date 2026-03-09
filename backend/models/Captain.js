@@ -32,6 +32,10 @@ const toDoc = (row) => {
         earnings: parseFloat(row.earnings),
         totalRides: row.total_rides,
         isOnline: row.is_online,
+        isVerified: row.is_verified,
+        insuranceCert: row.insurance_cert,
+        driverLicense: row.driver_license,
+        driverAadhaar: row.driver_aadhaar,
         socketId: row.socket_id,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -113,10 +117,17 @@ const Captain = {
         const v = data.vehicle;
         const { rows } = await pool.query(
             `INSERT INTO captains
-               (name, phone, password, vehicle_type, vehicle_plate, vehicle_color, vehicle_model)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+               (name, phone, password, vehicle_type, vehicle_plate, vehicle_color, vehicle_model,
+                insurance_cert, driver_license, driver_aadhaar)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              RETURNING *`,
-            [data.name, data.phone, hashedPassword, v.type, v.plate, v.color, v.model]
+            [
+                data.name, data.phone, hashedPassword,
+                v.type, v.plate, v.color, v.model,
+                data.insuranceCert || null,
+                data.driverLicense || null,
+                data.driverAadhaar || null,
+            ]
         );
         return toDoc(rows[0]);
     },
@@ -129,6 +140,7 @@ const Captain = {
 
         if (update.socketId !== undefined) { fields.push(`socket_id = $${i++}`); values.push(update.socketId); }
         if (update.isOnline !== undefined) { fields.push(`is_online = $${i++}`); values.push(update.isOnline); }
+        if (update.isVerified !== undefined) { fields.push(`is_verified = $${i++}`); values.push(update.isVerified); }
         if (update.earnings !== undefined) { fields.push(`earnings = $${i++}`); values.push(update.earnings); }
         if (update.totalRides !== undefined) { fields.push(`total_rides = $${i++}`); values.push(update.totalRides); }
         if (update.rating !== undefined) { fields.push(`rating = $${i++}`); values.push(update.rating); }

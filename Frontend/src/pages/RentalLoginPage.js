@@ -19,8 +19,24 @@ export default function RentalLoginPage() {
         ownerName: "", companyName: "", phone: "", email: "",
         address: "", totalVehicles: "", password: "", confirmPw: "",
     });
+    const [docs, setDocs] = useState({ insuranceCert: "", driverLicense: "", ownerAadhaar: "" });
 
     const set = (f) => (e) => setForm({ ...form, [f]: e.target.value });
+
+    const readFileAsBase64 = (file) =>
+        new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+
+    const handleFile = (field) => async (e) => {
+        if (e.target.files[0]) {
+            const b64 = await readFileAsBase64(e.target.files[0]);
+            setDocs((d) => ({ ...d, [field]: b64 }));
+        }
+    };
 
     /* ── Login ── */
     const handleLogin = async (e) => {
@@ -44,11 +60,18 @@ export default function RentalLoginPage() {
         setError("");
         if (form.password.length < 6) { setError("Password must be at least 6 characters"); return; }
         if (form.password !== form.confirmPw) { setError("Passwords do not match"); return; }
+        if (!docs.insuranceCert || !docs.driverLicense || !docs.ownerAadhaar) {
+            setError("Car insurance certificate, driver licence, and Aadhaar card are required");
+            return;
+        }
         setLoading(true);
         try {
             const { confirmPw: _, ...payload } = form;
             const res = await axios.post(`${BACKEND_URL}/api/fleet/owners`, {
                 ...payload, totalVehicles: Number(payload.totalVehicles),
+                insuranceCert: docs.insuranceCert,
+                driverLicense: docs.driverLicense,
+                ownerAadhaar: docs.ownerAadhaar,
             });
             localStorage.setItem("rental_provider", JSON.stringify(res.data.owner));
             navigate("/fleet/dashboard");
@@ -64,7 +87,7 @@ export default function RentalLoginPage() {
                 <div style={{ textAlign: "center", marginBottom: 24 }}>
                     <div style={{ fontSize: 48, marginBottom: 8 }}>🔑</div>
                     <h2 style={{ color: "#fff", fontWeight: 800, fontSize: 22, margin: 0 }}>Rental Provider Portal</h2>
-                    <p style={{ color: "#888", fontSize: 13, marginTop: 6 }}>UCab Services — Provider Login</p>
+                    <p style={{ color: "#888", fontSize: 13, marginTop: 6 }}>uride services — Provider Login</p>
                 </div>
 
                 {/* Tabs */}
@@ -134,6 +157,36 @@ export default function RentalLoginPage() {
                                     <input required type="password" placeholder="Repeat password"
                                         value={form.confirmPw} onChange={set("confirmPw")} style={inp} />
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* Mandatory Document Uploads */}
+                        <div style={{ borderTop: "1px solid #1e2530", paddingTop: 12 }}>
+                            <div style={{ fontSize: 11, color: "#f6ad55", marginBottom: 8, fontWeight: 700, letterSpacing: 0.5 }}>
+                                📄 MANDATORY DOCUMENTS (required for verification)
+                            </div>
+                            <div style={row}>
+                                <div style={grp}>
+                                    <label style={lbl}>🏷️ Car Insurance Certificate *</label>
+                                    <input type="file" accept="image/*,.pdf"
+                                        onChange={handleFile("insuranceCert")}
+                                        style={{ ...inp, padding: "7px 10px", fontSize: 12 }} />
+                                    {docs.insuranceCert && <span style={{ fontSize: 11, color: "#1db954" }}>✓ Uploaded</span>}
+                                </div>
+                                <div style={grp}>
+                                    <label style={lbl}>📋 Driver Licence *</label>
+                                    <input type="file" accept="image/*,.pdf"
+                                        onChange={handleFile("driverLicense")}
+                                        style={{ ...inp, padding: "7px 10px", fontSize: 12 }} />
+                                    {docs.driverLicense && <span style={{ fontSize: 11, color: "#1db954" }}>✓ Uploaded</span>}
+                                </div>
+                            </div>
+                            <div style={{ ...grp, marginTop: 8 }}>
+                                <label style={lbl}>🪪 Owner Aadhaar Card *</label>
+                                <input type="file" accept="image/*,.pdf"
+                                    onChange={handleFile("ownerAadhaar")}
+                                    style={{ ...inp, padding: "7px 10px", fontSize: 12, maxWidth: 240 }} />
+                                {docs.ownerAadhaar && <span style={{ fontSize: 11, color: "#1db954" }}>✓ Uploaded</span>}
                             </div>
                         </div>
 
