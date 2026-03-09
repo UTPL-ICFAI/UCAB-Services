@@ -32,6 +32,10 @@ const CaptainPage = () => {
   const [otpVerified, setOtpVerified] = useState(false);
   const [otpError, setOtpError] = useState(false);
 
+  /* ─── Messaging state ────────────────────────────────────── */
+  const [msgInput, setMsgInput] = useState("");
+  const [rideStartedConfirmed, setRideStartedConfirmed] = useState(false);
+
   /* ─── Account drawer + trip history ─────────────────────── */
   const [showAccount, setShowAccount] = useState(false);
   const [tripHistory, setTripHistory] = useState([]);   // completed trips this session
@@ -109,7 +113,8 @@ const CaptainPage = () => {
       if (valid) {
         setOtpVerified(true);
         setOtpError(false);
-        showToast("✅ OTP verified! You can start the ride.");
+        setRideStartedConfirmed(true);
+        showToast("✅ OTP verified! Ride has started.");
       } else {
         setOtpVerified(false);
         setOtpError(true);
@@ -208,6 +213,8 @@ const CaptainPage = () => {
     setOtpInput("");
     setOtpVerified(false);
     setOtpError(false);
+    setMsgInput("");
+    setRideStartedConfirmed(false);
     showToast("✅ Ride accepted! Head to pickup.");
   };
 
@@ -247,6 +254,8 @@ const CaptainPage = () => {
     });
     setAcceptedRide(null);
     setMapRide(null);
+    setMsgInput("");
+    setRideStartedConfirmed(false);
     showToast("🏁 Ride completed!");
   };
 
@@ -692,6 +701,83 @@ const CaptainPage = () => {
                   )}
                 </>
               )}
+            </div>
+
+            {/* ── Ride Started Banner (shown after OTP verified) ── */}
+            {rideStartedConfirmed && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10,
+                background: "rgba(29,185,84,0.15)", border: "1.5px solid #1db954",
+                borderRadius: 12, padding: "12px 14px", marginTop: 12,
+                animation: "fadeSlideUp 0.4s ease",
+              }}>
+                <span style={{ fontSize: 26 }}>🚗</span>
+                <div>
+                  <div style={{ color: "#1db954", fontWeight: 800, fontSize: 15 }}>Ride Started!</div>
+                  <div style={{ color: "#888", fontSize: 12 }}>Drive safely to the destination.</div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Message Rider Panel ── */}
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 12, color: "#888", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
+                💬 Message Rider
+              </div>
+              {/* Quick message chips */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                {["I'm nearby 👋", "On my way 🚗", "2 min away ⏱️", `Look for ${user.vehicle?.color || ""} ${user.vehicle?.model || ""} 🔍`].map((quickMsg) => (
+                  <button key={quickMsg}
+                    style={{
+                      padding: "6px 11px", background: "#1a1a2e",
+                      border: "1px solid #2a3040", borderRadius: 20,
+                      color: "#ccc", fontSize: 12, cursor: "pointer",
+                    }}
+                    onClick={() => {
+                      if (!acceptedRide?.rideId) return;
+                      socket.emit("captain:message", { rideId: acceptedRide.rideId, message: quickMsg });
+                      showToast(`📤 Sent: "${quickMsg}"`);
+                    }}>
+                    {quickMsg}
+                  </button>
+                ))}
+              </div>
+              {/* Custom message input */}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  type="text"
+                  placeholder="Type a message…"
+                  value={msgInput}
+                  maxLength={200}
+                  onChange={(e) => setMsgInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && msgInput.trim() && acceptedRide?.rideId) {
+                      socket.emit("captain:message", { rideId: acceptedRide.rideId, message: msgInput.trim() });
+                      showToast("📤 Message sent");
+                      setMsgInput("");
+                    }
+                  }}
+                  style={{
+                    flex: 1, padding: "10px 12px", background: "#1a1a1a",
+                    border: "1.5px solid #333", borderRadius: 10,
+                    color: "#fff", fontSize: 13, outline: "none",
+                  }}
+                />
+                <button
+                  style={{
+                    padding: "10px 14px", background: "#2b6cb0",
+                    border: "none", borderRadius: 10, color: "#fff",
+                    fontWeight: 700, fontSize: 13, cursor: "pointer",
+                  }}
+                  onClick={() => {
+                    if (!msgInput.trim() || !acceptedRide?.rideId) return;
+                    socket.emit("captain:message", { rideId: acceptedRide.rideId, message: msgInput.trim() });
+                    showToast("📤 Message sent");
+                    setMsgInput("");
+                  }}>
+                  Send
+                </button>
+              </div>
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>

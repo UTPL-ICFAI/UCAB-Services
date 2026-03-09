@@ -102,6 +102,10 @@ const UserPage = () => {
   const [searchElapsed, setSearchElapsed] = useState(0);
   const searchTimerRef = useRef(null);
 
+  /* ─── Messaging / ride-started state ─────────────────────── */
+  const [captainMessages, setCaptainMessages] = useState([]);
+  const [rideStarted, setRideStarted] = useState(false);
+
   /* ─── Account drawer ──────────────────────────────────────── */
   const [showAccount, setShowAccount] = useState(false);
 
@@ -262,6 +266,22 @@ const UserPage = () => {
     };
   }, [pickup, socket]);
 
+  /* ─── Captain messages + ride:started ──────────────────── */
+  useEffect(() => {
+    socket.on("captain:message", (payload) => {
+      setCaptainMessages((prev) => [...prev, payload]);
+      showToast(`💬 Captain: ${payload.message}`);
+    });
+    socket.on("ride:started", () => {
+      setRideStarted(true);
+      setTimeout(() => setRideStarted(false), 4000);
+    });
+    return () => {
+      socket.off("captain:message");
+      socket.off("ride:started");
+    };
+  }, [socket]);
+
   /* ─── Rating helpers ────────────────────────────────────── */
   const resetAfterRide = () => {
     setRideStatus("idle");
@@ -278,6 +298,8 @@ const UserPage = () => {
     clearInterval(searchTimerRef.current);
     setSearchElapsed(0);
     setTipAmount(0);
+    setCaptainMessages([]);
+    setRideStarted(false);
   };
 
   /* ─── Searching timer ──────────────────────────────────── */
@@ -334,7 +356,8 @@ const UserPage = () => {
       rideType: rideType.id, paymentMethod: payMethod, scheduledAt,
       userId: user._id || null,
     };
-    lastRideParamsRef.current = params;
+    // Store BOTH the params and the original base fare separately
+    lastRideParamsRef.current = { ...params, _baseFare: fare };
     setTipAmount(0);
 
     socket.emit("new ride request", params);
@@ -351,11 +374,13 @@ const UserPage = () => {
   /* ─── Apply tip (re-emit ride request with updated fare) ──── */
   const applyTip = (newTip) => {
     if (!lastRideParamsRef.current) return;
-    setTipAmount(newTip);
-    const updatedParams = { ...lastRideParamsRef.current, fare: lastRideParamsRef.current.fare + newTip };
+    // Always compute from the original base fare to prevent accumulation
+    const baseFare = lastRideParamsRef.current._baseFare ?? lastRideParamsRef.current.fare;
+    const updatedParams = { ...lastRideParamsRef.current, fare: baseFare + newTip, _baseFare: baseFare };
     lastRideParamsRef.current = updatedParams;
+    setTipAmount(newTip);
     socket.emit("new ride request", updatedParams);
-    showToast(newTip > 0 ? `💰 Tip added! Searching with ₹${newTip} tip…` : "Tip removed. Searching…");
+    showToast(newTip > 0 ? `💰 Tip added! Captains now see ₹${baseFare + newTip}` : "Tip removed. Searching…");
   };
 
   /* ─── Cancel ride ─────────────────────────────────────────── */
@@ -582,7 +607,14 @@ const UserPage = () => {
               <div className="trs-row"><span className="trs-dot red" /><span>{dropoff?.address || "Dropoff"}</span></div>
             </div>
             <div className="trip-meta-row">
-              <span>💰 ₹{fare + tipAmount}{tipAmount > 0 && <span style={{ color: "#f6ad55", fontSize: 11, marginLeft: 4 }}>+₹{tipAmount} tip</span>}</span>
+              <span>
+                💰 ₹{fare + tipAmount}
+                {tipAmount > 0 && (
+                  <span style={{ fontSize: 11, color: "#f6ad55", marginLeft: 5, fontWeight: 700 }}>
+                    (₹{fare} + ₹{tipAmount} tip)
+                  </span>
+                )}
+              </span>
               <span>📍 {routeInfo?.distKm || "~"} km</span>
               <span>⏱ {routeInfo?.durationMin || "~"} min</span>
             </div>
@@ -615,6 +647,21 @@ const UserPage = () => {
       {rideStatus === "accepted" && currentRide && (
         <div className="trip-sheet accepted-sheet">
           <div className="trip-sheet-inner">
+            {/* Ride Started overlay */}
+            {rideStarted && (
+              <div style={{
+                position: "fixed", inset: 0, zIndex: 9999,
+                background: "rgba(0,0,0,0.93)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                animation: "rideStartFade 0.4s ease",
+              }}>
+                <div style={{ textAlign: "center", animation: "rideStartBounce 0.5s cubic-bezier(0.34,1.56,0.64,1)" }}>
+                  <div style={{ fontSize: 72 }}>🚗</div>
+                  <h2 style={{ color: "#1db954", fontSize: 34, fontWeight: 800, margin: "16px 0 8px" }}>Ride Started!</h2>
+                  <p style={{ color: "#888", fontSize: 15 }}>Your journey has begun. Enjoy the ride!</p>
+                </div>
+              </div>
+            )}
             <div className="otp-banner">
               <span className="otp-label">Share OTP with captain</span>
               <span className="otp-code">{tripOtp}</span>
@@ -663,6 +710,28 @@ const UserPage = () => {
                 <span>{(captainInfo?.vehicle?.type || rideType.id).toUpperCase()}</span>
               </div>
             </div>
+
+            {/* ── Captain messages ── */}
+            {captainMessages.length > 0 && (
+              <div style={{ margin: "10px 0 2px", display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ fontSize: 11, color: "#888", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>
+                  💬 Messages from Captain
+                </div>
+                {captainMessages.map((m, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#1a1f27", padding: "10px 12px", borderRadius: 12 }}>
+                    <div style={{ width: 30, height: 30, background: "#2b6cb0", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13, color: "#fff", flexShrink: 0 }}>
+                      {m.captainName?.[0]?.toUpperCase() || "C"}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, color: "#eee" }}>{m.message}</div>
+                      <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>
+                        {new Date(m.ts).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="trip-route-summary">
               <div className="trs-row"><span className="trs-dot green" /><span>{pickup?.address || "Pickup"}</span></div>
               <div className="trs-line" />

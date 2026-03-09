@@ -1981,3 +1981,18 @@ input:checked + .toggle-slider::before { transform: translateX(26px); }
 .blue  { color: #3498db; }
 .gold  { color: #f1c40f; }
 
+
+
+/* -- Messaging & Ride Started (Session 3) -------------------- */
+@keyframes rideStartFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes rideStartBounce {
+  from { transform: scale(0.6); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

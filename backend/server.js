@@ -327,9 +327,32 @@ io.on("connection", (socket) => {
             const inputHash = crypto.createHash("sha256").update(String(otp)).digest("hex");
             const valid = inputHash === ride.otp;
             socket.emit("otp result", { rideId, valid, reason: valid ? null : "Invalid OTP — please try again" });
-            if (valid) console.log(`🔐 OTP verified for ride ${rideId}`);
+            if (valid) {
+                console.log(`🔐 OTP verified for ride ${rideId}`);
+                // Notify rider that the ride has officially started
+                const rideStartedPayload = { rideId };
+                if (ride.riderId) io.to(`user:${ride.riderId}`).emit("ride:started", rideStartedPayload);
+                if (ride.riderSocketId) io.to(ride.riderSocketId).emit("ride:started", rideStartedPayload);
+            }
         } catch (err) {
             console.error("verify otp error:", err.message);
+        }
+    });
+
+    // ── Captain sends a message to the rider ────────────────────
+    socket.on("captain:message", async ({ rideId, message }) => {
+        try {
+            if (!message || !rideId) return;
+            const ride = await Ride.findById(rideId).catch(() => null);
+            const captainName = ride
+                ? (await Captain.findOne({ socketId: socket.id }).catch(() => null))?.name || "Captain"
+                : "Captain";
+            const payload = { rideId, message: String(message).slice(0, 200), captainName, ts: Date.now() };
+            if (ride?.riderId) io.to(`user:${ride.riderId}`).emit("captain:message", payload);
+            if (ride?.riderSocketId) io.to(ride.riderSocketId).emit("captain:message", payload);
+            console.log(`💬 Captain msg for ride ${rideId}: "${message}"`);
+        } catch (err) {
+            console.error("captain:message error:", err.message);
         }
     });
 
