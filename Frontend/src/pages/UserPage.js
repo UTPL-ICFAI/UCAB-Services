@@ -35,6 +35,26 @@ const PAY_METHODS = [
 const CANCEL_FREE_MINS = 2;
 const CANCEL_FEE = 50;
 
+const SUPPORT_CATEGORIES = [
+  { id: "driver_behavior",    label: "Driver behavior" },
+  { id: "overcharged",        label: "Overcharged / wrong fare" },
+  { id: "safety",             label: "Safety concern" },
+  { id: "wrong_route",        label: "Wrong route taken" },
+  { id: "ride_not_completed", label: "Ride not completed" },
+  { id: "app_issue",          label: "App / technical issue" },
+  { id: "other",              label: "Other" },
+];
+
+const CANCEL_REASONS = [
+  "Driver is too far away",
+  "Changed my mind",
+  "Wrong pickup location",
+  "Took too long to find a driver",
+  "Booked by mistake",
+  "Found another option",
+  "Other",
+];
+
 const calcFare = (type, km) => Math.round(type.base + type.perKm * (km || 5));
 const calcCourier = (v, km, kg) => Math.round(v.base + v.perKm * (km || 3) + (kg > 2 ? (kg - 2) * 5 : 0));
 const fmtTime = (date) =>
@@ -134,6 +154,18 @@ const UserPage = () => {
   const [bidPrice, setBidPrice] = useState("");
   const [bidStatus, setBidStatus] = useState(null);
   const [bidCounter, setBidCounter] = useState(null);
+
+  /* ─── Support / complaint system ─────────────────────────── */
+  const [supportModal, setSupportModal] = useState(false);
+  const [supportRide, setSupportRide] = useState(null);
+  const [supportCategory, setSupportCategory] = useState("driver_behavior");
+  const [supportDesc, setSupportDesc] = useState("");
+  const [supportMsg, setSupportMsg] = useState("");
+  const [supportTickets, setSupportTickets] = useState([]);
+
+  /* ─── Cancel reason modal ────────────────────────────────── */
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
 
   /* ─── Courier state ───────────────────────────────────────── */
   const [cFrom, setCFrom] = useState(null);
@@ -376,6 +408,10 @@ const UserPage = () => {
     setPromoDiscount(0);
     setPromoCode("");
     setPromoMsg("");
+    setSupportModal(false);
+    setSupportMsg("");
+    setShowCancelModal(false);
+    setCancelReason("");
   };
 
   /* ─── Wallet helpers ───────────────────────────────────────── */
@@ -422,6 +458,36 @@ const UserPage = () => {
     }
     setBidStatus("accepted");
     showToast(`✅ Counter bid of ₹${bidCounter} accepted!`);
+  };
+
+  /* ─── Support helpers ────────────────────────────────── */
+  const openSupportModal = (ride = null, cat = "driver_behavior") => {
+    setSupportRide(ride);
+    setSupportCategory(cat);
+    setSupportDesc("");
+    setSupportMsg("");
+    setSupportModal(true);
+    setShowAccount(false);
+  };
+
+  const submitSupportTicket = async () => {
+    if (!supportDesc.trim()) { showToast("⚠️ Please describe your issue"); return; }
+    try {
+      const cat = SUPPORT_CATEGORIES.find((c) => c.id === supportCategory);
+      await axios.post(
+        `${BACKEND_URL}/api/support/ticket`,
+        { rideId: supportRide?.id || null, category: supportCategory, subject: cat?.label || supportCategory, description: supportDesc },
+        { headers: { Authorization: `Bearer ${tkn}` } }
+      );
+      setSupportMsg("✅ Complaint submitted! Our team will contact you within 24 hours.");
+      setSupportDesc("");
+      showToast("✅ Report submitted to uride support");
+      // refresh ticket list
+      axios.get(`${BACKEND_URL}/api/support/tickets`, { headers: { Authorization: `Bearer ${tkn}` } })
+        .then((r) => setSupportTickets(r.data.tickets || [])).catch(() => {});
+    } catch (err) {
+      setSupportMsg(`❌ ${err.response?.data?.error || "Submission failed"}`);
+    }
   };
 
   /* ─── Searching timer ──────────────────────────────────── */
@@ -511,9 +577,14 @@ const UserPage = () => {
 
   /* ─── Cancel ride ─────────────────────────────────────────── */
   const cancelRide = () => {
+    setCancelReason("");
+    setShowCancelModal(true);
+  };
+
+  const confirmCancel = () => {
+    setShowCancelModal(false);
     const minsElapsed = acceptedAt.current ? (Date.now() - acceptedAt.current) / 60000 : 0;
     const fee = rideStatus === "accepted" && minsElapsed > CANCEL_FREE_MINS ? CANCEL_FEE : 0;
-    if (fee > 0 && !window.confirm(`₹${fee} cancellation fee applies. Cancel anyway?`)) return;
     setRideStatus("idle");
     setCurrentRide(null);
     setCaptainPos(null);
@@ -526,6 +597,7 @@ const UserPage = () => {
     setUserMsgInput("");
     lastRideParamsRef.current = null;
     setSheetH(pickup && dropoff ? MID : PEEK);
+    setCancelReason("");
     showToast(fee > 0 ? `Cancelled · ₹${fee} fee applies` : "Ride cancelled");
   };
 
@@ -719,6 +791,10 @@ const UserPage = () => {
                 style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, padding: "10px 14px", color: "#eee", cursor: "pointer", textAlign: "left", fontSize: 14 }}>
                 🗓️ Book Fleet Vehicles
               </button>
+              <button onClick={() => openSupportModal(null, "app_issue")}
+                style={{ background: "#1a0000", border: "1px solid #e53935", borderRadius: 10, padding: "10px 14px", color: "#e53935", cursor: "pointer", textAlign: "left", fontSize: 14, fontWeight: 700 }}>
+                🆘 Help &amp; Support
+              </button>
             </div>
             </>)}
 
@@ -790,6 +866,11 @@ const UserPage = () => {
                             <span className="thc-addr">{t.dropoff?.address || "Dropoff"}</span></div>
                         </div>
                         {t.captain && <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>👤 {t.captain.name} · ⭐ {parseFloat(t.captain.rating).toFixed(1)}</div>}
+                        <button
+                          onClick={() => openSupportModal(t, "driver_behavior")}
+                          style={{ marginTop: 8, width: "100%", padding: "8px 0", background: "transparent", border: "1px solid #333", borderRadius: 8, color: "#888", cursor: "pointer", fontSize: 12 }}>
+                          ⚠️ Had an issue? Report it
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1090,6 +1171,11 @@ const UserPage = () => {
               }}
             >
               Skip
+            </button>
+            <button
+              onClick={() => openSupportModal({ id: currentRideId.current }, "driver_behavior")}
+              style={{ marginTop: 10, background: "transparent", border: "none", color: "#e53935", cursor: "pointer", fontSize: 13, textDecoration: "underline" }}>
+              ⚠️ Had an issue with this trip? Report it
             </button>
           </div>
         </div>
@@ -1515,6 +1601,136 @@ const UserPage = () => {
             )}
 
           </div>{/* end sheet-scroll-area */}
+        </div>
+      )}
+
+      {/* ── Support / Complaint Modal ── */}
+      {supportModal && (
+        <div className="support-modal-overlay" onClick={() => { setSupportModal(false); setSupportMsg(""); }}>
+          <div className="support-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="support-modal-header">
+              <div className="support-modal-title">🆘 Report an Issue</div>
+              <button onClick={() => { setSupportModal(false); setSupportMsg(""); }}
+                style={{ background: "none", border: "none", color: "#888", fontSize: 24, cursor: "pointer", lineHeight: 1 }}>✕</button>
+            </div>
+
+            {supportRide?.pickup?.address && (
+              <div style={{ background: "#1a1a1a", borderRadius: 10, padding: "10px 12px", marginBottom: 12, fontSize: 12, color: "#888" }}>
+                📋 Ride: {supportRide.pickup.address.slice(0, 32)}{supportRide.pickup.address.length > 32 ? "…" : ""}
+              </div>
+            )}
+
+            <div className="support-label">Category</div>
+            <select value={supportCategory} onChange={(e) => setSupportCategory(e.target.value)} className="support-select">
+              {SUPPORT_CATEGORIES.map((c) => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </select>
+
+            <div className="support-label" style={{ marginTop: 14 }}>Describe your issue</div>
+            <textarea
+              value={supportDesc}
+              onChange={(e) => setSupportDesc(e.target.value)}
+              placeholder="Please describe what happened in detail…"
+              rows={4}
+              className="support-textarea"
+              maxLength={1000}
+            />
+            <div style={{ fontSize: 11, color: "#555", textAlign: "right", marginTop: 2 }}>{supportDesc.length}/1000</div>
+
+            {supportMsg && (
+              <div style={{
+                fontSize: 13, padding: "10px 12px", borderRadius: 10, marginTop: 10,
+                background: supportMsg.startsWith("✅") ? "#0d2818" : "#1a0000",
+                color: supportMsg.startsWith("✅") ? "#1db954" : "#e53935",
+                border: `1px solid ${supportMsg.startsWith("✅") ? "#1db954" : "#e53935"}`,
+              }}>{supportMsg}</div>
+            )}
+
+            {!supportMsg.startsWith("✅") && (
+              <button onClick={submitSupportTicket} className="support-submit-btn">
+                📤 Submit Report
+              </button>
+            )}
+
+            {supportTickets.length > 0 && (
+              <>
+                <div className="support-label" style={{ marginTop: 20 }}>Your Previous Reports</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {supportTickets.slice(0, 5).map((tk, i) => (
+                    <div key={tk.id || i} style={{ background: "#161616", borderRadius: 10, padding: "10px 12px", border: "1px solid #2a2a2a" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#eee", flex: 1, marginRight: 8 }}>{tk.subject}</div>
+                        <span className={`support-status-pill ${tk.status}`}>{tk.status.replace("_", " ")}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "#666" }}>
+                        {new Date(tk.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                      </div>
+                      {tk.admin_note && (
+                        <div style={{ fontSize: 12, color: "#f6ad55", marginTop: 6, borderTop: "1px solid #2a2a2a", paddingTop: 6 }}>
+                          💬 Support: {tk.admin_note}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Cancel Reason Modal ── */}
+      {showCancelModal && (
+        <div className="support-modal-overlay" onClick={() => setShowCancelModal(false)}>
+          <div className="support-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="support-modal-header">
+              <div className="support-modal-title">Cancel Ride</div>
+              <button onClick={() => setShowCancelModal(false)}
+                style={{ background: "none", border: "none", color: "#888", fontSize: 24, cursor: "pointer", lineHeight: 1 }}>✕</button>
+            </div>
+
+            {rideStatus === "accepted" && (() => {
+              const minsElapsed = acceptedAt.current ? (Date.now() - acceptedAt.current) / 60000 : 0;
+              const fee = minsElapsed > CANCEL_FREE_MINS ? CANCEL_FEE : 0;
+              return fee > 0 ? (
+                <div style={{ background: "#1a0a00", border: "1px solid #e53935", borderRadius: 10, padding: "10px 12px", marginBottom: 12, fontSize: 13, color: "#e53935" }}>
+                  ⚠️ A ₹{CANCEL_FEE} cancellation fee applies ({Math.round(minsElapsed)} min elapsed)
+                </div>
+              ) : (
+                <div style={{ background: "#0d2818", borderRadius: 10, padding: "10px 12px", marginBottom: 12, fontSize: 13, color: "#1db954" }}>
+                  ✅ Free cancellation — captain accepted less than {CANCEL_FREE_MINS} minutes ago
+                </div>
+              );
+            })()}
+
+            <div className="support-label">Why are you cancelling?</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+              {CANCEL_REASONS.map((r) => (
+                <button key={r} onClick={() => setCancelReason(r)}
+                  style={{
+                    padding: "12px 14px", borderRadius: 10, textAlign: "left", fontSize: 14, cursor: "pointer",
+                    background: cancelReason === r ? "#0e2b1a" : "#1a1a1a",
+                    border: `1.5px solid ${cancelReason === r ? "#1db954" : "#2a2a2a"}`,
+                    color: cancelReason === r ? "#1db954" : "#ccc",
+                    transition: "all 0.15s",
+                  }}>
+                  {cancelReason === r ? "✓ " : ""}{r}
+                </button>
+              ))}
+            </div>
+
+            <button onClick={cancelReason ? confirmCancel : undefined}
+              style={{
+                marginTop: 16, width: "100%", padding: "14px", borderRadius: 12, border: "none",
+                background: cancelReason ? "#e53935" : "#2a2a2a",
+                color: cancelReason ? "#fff" : "#555",
+                fontWeight: 700, fontSize: 15, cursor: cancelReason ? "pointer" : "not-allowed",
+                transition: "background 0.2s",
+              }}>
+              {cancelReason ? "Confirm Cancel" : "Select a reason to continue"}
+            </button>
+          </div>
         </div>
       )}
 

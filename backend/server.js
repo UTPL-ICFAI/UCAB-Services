@@ -16,6 +16,7 @@ const notificationRoutes = require("./notifications/notification.routes");
 const registerNotificationSocket = require("./notifications/notification.socket");
 const fleetRoutes = require("./fleet/fleet.routes");
 const walletRoutes = require("./wallet.routes");
+const supportRoutes = require("./support.routes");
 
 const app = express();
 const server = http.createServer(app);
@@ -80,6 +81,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/fleet", fleetRoutes);
 app.use("/api/wallet", walletRoutes);
+app.use("/api/support", supportRoutes);
 app.get("/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
 
 // ── PostgreSQL + auto-migrate ────────────────────────────────

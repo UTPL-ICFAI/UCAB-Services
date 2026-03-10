@@ -2214,3 +2214,97 @@ input:checked + .toggle-slider::before { transform: translateX(26px); }
     padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+
+/* ── Support / Complaint Modal ─────────────────────────── */
+.support-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.support-modal {
+  background: #111;
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-width: 480px;
+  max-height: 88dvh;
+  overflow-y: auto;
+  padding: 20px 16px 32px;
+}
+.support-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.support-modal-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #eee;
+}
+.support-label {
+  font-size: 11px;
+  color: #888;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 6px;
+}
+.support-select {
+  width: 100%;
+  padding: 12px 14px;
+  background: #1a1a1a;
+  border: 1.5px solid #333;
+  border-radius: 10px;
+  color: #eee;
+  font-size: 14px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.support-select:focus { border-color: #555; }
+.support-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  background: #1a1a1a;
+  border: 1.5px solid #333;
+  border-radius: 10px;
+  color: #eee;
+  font-size: 14px;
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+  line-height: 1.6;
+  font-family: inherit;
+}
+.support-textarea:focus { border-color: #555; }
+.support-submit-btn {
+  margin-top: 14px;
+  width: 100%;
+  padding: 14px;
+  background: #e53935;
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.support-submit-btn:hover { background: #b71c1c; }
+.support-status-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.support-status-pill.open      { background: #1a2030; color: #6699cc; }
+.support-status-pill.in_review { background: #1a1200; color: #f6ad55; }
+.support-status-pill.resolved  { background: #0d2818; color: #1db954; }
+.support-status-pill.closed    { background: #1a1a1a; color: #555; }
