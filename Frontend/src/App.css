@@ -1996,3 +1996,221 @@ input:checked + .toggle-slider::before { transform: translateX(26px); }
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   NEW FEATURE STYLES  (wallet · promo · bid · SOS · chart)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Wallet balance card ──────────────────────────────────── */
+.wallet-balance-card {
+  background: linear-gradient(135deg, #0e2b1a 0%, #1a3a28 100%);
+  border: 1.5px solid #1db954;
+  border-radius: 16px;
+  padding: 20px 18px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.wallet-big-amt {
+  font-size: 36px;
+  font-weight: 900;
+  color: #1db954;
+  letter-spacing: -1px;
+  margin: 6px 0;
+}
+
+/* ── Promo code row ───────────────────────────────────────── */
+.promo-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  margin-bottom: 6px;
+}
+
+/* ── Bid pricing UI ───────────────────────────────────────── */
+.bid-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #eee;
+  margin-bottom: 8px;
+  margin-top: 4px;
+  user-select: none;
+}
+.bid-box {
+  background: #111;
+  border: 1.5px solid #f6ad55;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+/* ── SOS button (pulsing red) ─────────────────────────────── */
+.sos-btn {
+  background: #e53935 !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 50px !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.5px;
+  animation: sosPulse 1.6s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.7);
+}
+@keyframes sosPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.7); }
+  70%  { box-shadow: 0 0 0 10px rgba(229, 57, 53, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0); }
+}
+
+/* ── ETA banner ───────────────────────────────────────────── */
+.eta-banner {
+  background: rgba(29, 185, 84, 0.12);
+  border: 1.5px solid #1db954;
+  border-radius: 10px;
+  padding: 10px 14px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1db954;
+  margin-bottom: 10px;
+}
+
+/* ── Earnings bar chart ───────────────────────────────────── */
+.earnings-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  background: #111;
+  border-radius: 14px;
+  padding: 16px 12px;
+  height: 120px;
+  margin-bottom: 8px;
+}
+.chart-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+.chart-bar-label {
+  font-size: 9px;
+  color: #888;
+  margin-bottom: 4px;
+  white-space: nowrap;
+}
+.chart-bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.chart-bar {
+  width: 70%;
+  background: linear-gradient(180deg, #1db954 0%, #0d6e32 100%);
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+  transition: height 0.4s ease;
+}
+.chart-bar-time {
+  font-size: 8px;
+  color: #555;
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE  (max-width 480px)
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+
+  /* Layout */
+  .uber-layout { height: 100dvh; }
+
+  /* Top bar */
+  .top-bar { padding: 10px 14px; }
+  .top-bar-logo { font-size: 16px; }
+
+  /* Bottom sheets  */
+  .bottom-sheet { border-radius: 20px 20px 0 0; }
+  .captain-bottom-panel { border-radius: 20px 20px 0 0; padding: 14px 14px 20px; }
+
+  /* Ride type selector — scroll horizontally */
+  .ride-type-selector {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .ride-type-selector::-webkit-scrollbar { display: none; }
+  .ride-type-card { min-width: 80px; flex-shrink: 0; padding: 10px 6px; }
+  .ride-type-icon { font-size: 22px; }
+  .ride-type-name { font-size: 11px; }
+  .ride-type-fare { font-size: 12px; }
+
+  /* Inputs — touch friendly */
+  input[type="text"], input[type="number"], input[type="password"], input[type="email"] {
+    min-height: 44px;
+    font-size: 16px !important; /* prevents iOS zoom */
+  }
+  button { min-height: 44px; }
+
+  /* Drawer */
+  .account-drawer, .cap-drawer {
+    max-height: 90dvh;
+    border-radius: 24px 24px 0 0;
+  }
+
+  /* Drawer tabs — 4 tabs on captain */
+  .drawer-tab-btn { font-size: 11px; padding: 7px 2px; }
+
+  /* Fare summary */
+  .fare-summary-row { flex-wrap: wrap; gap: 10px; }
+  .fare-summary-row .book-btn-inline { width: 100%; margin-top: 4px; }
+  .fare-amount { font-size: 26px; }
+
+  /* Stats row on captain panel */
+  .stats-row { gap: 6px; }
+  .stat-card { padding: 10px 6px; }
+  .stat-value { font-size: 16px; }
+  .stat-label { font-size: 10px; }
+
+  /* Ride request cards */
+  .ride-request-card { padding: 14px 12px; }
+
+  /* Toast */
+  .toast { font-size: 13px; padding: 11px 18px; bottom: 90px; max-width: calc(100% - 32px); }
+
+  /* Map */
+  .map-fullscreen { height: 100dvh; }
+
+  /* Captain bottom panel */
+  .captain-info-row { flex-wrap: wrap; gap: 6px; }
+
+  /* Wallet big amount */
+  .wallet-big-amt { font-size: 28px; }
+
+  /* Promo row */
+  .promo-row { flex-wrap: wrap; }
+  .promo-row input { min-width: 0; }
+
+  /* Earnings chart — fewer labels */
+  .chart-bar-time { display: none; }
+  .chart-bar-label { font-size: 8px; }
+
+  /* ETA banner */
+  .eta-banner { font-size: 13px; }
+
+  /* Safe area for notched phones */
+  .captain-bottom-panel, .bottom-sheet {
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+}

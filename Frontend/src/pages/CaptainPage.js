@@ -44,7 +44,31 @@ const CaptainPage = () => {
   /* ─── Panel tab inside drawer ────────────────────────────── */
   const [drawerTab, setDrawerTab] = useState("profile"); // profile | history | earnings
 
+  /* ─── Wallet state ──────────────────────────────────────── */
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [walletTxns, setWalletTxns] = useState([]);
+  const [withdrawAmt, setWithdrawAmt] = useState("");
+  const [withdrawMsg, setWithdrawMsg] = useState("");
+
+  /* ─── Bid respond state ─────────────────────────────────── */
+  const [bidRequests, setBidRequests] = useState({}); // rideId -> bidPrice
+  const [counterInputs, setCounterInputs] = useState({}); // rideId -> counterVal
+
+  /* ─── Location broadcast (ETA for rider) ────────────────── */
+  const locationIntervalRef = useRef(null);
+
   const toastTimer = useRef(null);
+
+  /* ─── Load captain wallet on mount ──────────────────────── */
+  useEffect(() => {
+    if (!tkn) return;
+    axios.get(`${BACKEND_URL}/api/wallet/captain-balance`, { headers: { Authorization: `Bearer ${tkn}` } })
+      .then((res) => {
+        setWalletBalance(res.data.balance || 0);
+        setWalletTxns(res.data.transactions || []);
+      })
+      .catch(() => {});
+  }, []);
 
   /* ─── Auto-connect + join vehicle room ───────────────────── */
   useEffect(() => {
@@ -127,11 +151,17 @@ const CaptainPage = () => {
       setUserMessages((prev) => [...prev, payload]);
       showToast(`📩 Rider: ${payload.message}`);
     });
+    // Bid request from rider
+    socket.on("ride:bid_updated", ({ rideId, bidPrice }) => {
+      setBidRequests((prev) => ({ ...prev, [rideId]: bidPrice }));
+      showToast(`💰 Rider bid ₹${bidPrice} for ride`);
+    });
     return () => {
       socket.off("notification:new");
       socket.off("captain:receive_otp");
       socket.off("otp result");
       socket.off("user:message");
+      socket.off("ride:bid_updated");
     };
   }, [socket]);
 
@@ -224,6 +254,41 @@ const CaptainPage = () => {
     setRideStartedConfirmed(false);
     setUserMessages([]);
     showToast("✅ Ride accepted! Head to pickup.");
+    // Begin broadcasting location to rider for ETA
+    clearInterval(locationIntervalRef.current);
+    if (navigator.geolocation) {
+      locationIntervalRef.current = setInterval(() => {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          socket.emit("captain:location", {
+            rideId: ride.rideId,
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          });
+        }, () => {});
+      }, 5000);
+    }
+  };
+
+  const respondBid = (rideId, action, counterPrice) => {
+    socket.emit("ride:bid_respond", { rideId, action, counterPrice });
+    setBidRequests((prev) => { const n = { ...prev }; delete n[rideId]; return n; });
+    setCounterInputs((prev) => { const n = { ...prev }; delete n[rideId]; return n; });
+    showToast(action === "accept" ? "✅ Bid accepted" : action === "counter" ? "↩️ Counter sent" : "❌ Bid rejected");
+  };
+
+  const requestWithdrawal = () => {
+    const amt = parseFloat(withdrawAmt);
+    if (!amt || amt < 100) { setWithdrawMsg("Minimum withdrawal is ₹100"); return; }
+    if (amt > walletBalance) { setWithdrawMsg("Insufficient wallet balance"); return; }
+    axios.post(`${BACKEND_URL}/api/wallet/withdrawal-request`, { amount: amt }, { headers: { Authorization: `Bearer ${tkn}` } })
+      .then((res) => {
+        setWalletBalance(res.data.newBalance || 0);
+        setWalletTxns((prev) => [{ type: "withdrawal_request", amount: amt, description: "Withdrawal request", created_at: new Date().toISOString() }, ...prev]);
+        setWithdrawAmt("");
+        setWithdrawMsg("✅ Withdrawal request submitted!");
+        showToast("✅ Withdrawal request submitted");
+      })
+      .catch((e) => setWithdrawMsg(e.response?.data?.error || "Request failed"));
   };
 
   const rejectRide = (rideId) => {
@@ -255,6 +320,7 @@ const CaptainPage = () => {
     setTotalRides((n) => n + 1);
     setEarnings((e) => e + (acceptedRide.fare || 0));
 
+    clearInterval(locationIntervalRef.current);
     socket.emit("complete ride", {
       rideId: acceptedRide.rideId,
       captainId: user._id,
@@ -344,6 +410,7 @@ const CaptainPage = () => {
                 { id: "profile", label: "Profile" },
                 { id: "history", label: "Trips" },
                 { id: "earnings", label: "Earnings" },
+                { id: "wallet", label: "Wallet" },
               ].map((t) => (
                 <button key={t.id}
                   className={`drawer-tab-btn ${drawerTab === t.id ? "active" : ""}`}
@@ -473,47 +540,117 @@ const CaptainPage = () => {
             )}
 
             {/* ─── Earnings tab ────────────────────────────────── */}
-            {drawerTab === "earnings" && (
-              <>
-                <div className="drawer-section-title">Earnings Breakdown</div>
-                <div className="earnings-overview">
-                  <div className="earn-big-card">
-                    <div style={{ fontSize: 12, color: "#888" }}>Session Earnings</div>
-                    <div className="earn-big-amt">₹{todayEarnings}</div>
-                    <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>{tripHistory.length} trips completed</div>
-                  </div>
-                  <div className="earn-big-card">
-                    <div style={{ fontSize: 12, color: "#888" }}>All-time Earnings</div>
-                    <div className="earn-big-amt">₹{earnings}</div>
-                    <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>{totalRides} total rides</div>
-                  </div>
-                </div>
-
-                <div className="drawer-section-title">Per-trip breakdown</div>
-                {tripHistory.length === 0 ? (
-                  <div style={{ color: "#555", fontSize: 13, textAlign: "center", padding: "20px 0" }}>
-                    No trips yet this session
-                  </div>
-                ) : (
-                  <div className="earn-breakdown-list">
-                    {tripHistory.map((trip, i) => (
-                      <div key={i} className="earn-row">
-                        <div>
-                          <div style={{ fontSize: 13, color: "#ccc", fontWeight: 600 }}>
-                            {trip.dropoff.length > 28 ? trip.dropoff.slice(0, 28) + "…" : trip.dropoff}
-                          </div>
-                          <div style={{ fontSize: 11, color: "#666" }}>
-                            {trip.date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })} · {trip.rideType}
-                          </div>
-                        </div>
-                        <div className="earn-row-fare">+₹{trip.fare}</div>
-                      </div>
-                    ))}
-                    <div className="earn-total-row">
-                      <span>Total</span>
-                      <span className="earn-row-fare">₹{todayEarnings}</span>
+            {drawerTab === "earnings" && (() => {
+              // Build last-7-trips bar chart data
+              const last7 = tripHistory.slice(0, 7).reverse();
+              const maxFare = Math.max(...last7.map((t) => t.fare), 1);
+              return (
+                <>
+                  <div className="drawer-section-title">Earnings Overview</div>
+                  <div className="earnings-overview">
+                    <div className="earn-big-card">
+                      <div style={{ fontSize: 12, color: "#888" }}>Session Earnings</div>
+                      <div className="earn-big-amt">₹{todayEarnings}</div>
+                      <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>{tripHistory.length} trips</div>
+                    </div>
+                    <div className="earn-big-card">
+                      <div style={{ fontSize: 12, color: "#888" }}>All-time Earnings</div>
+                      <div className="earn-big-amt">₹{earnings}</div>
+                      <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>{totalRides} total rides</div>
                     </div>
                   </div>
+
+                  {last7.length > 0 && (
+                    <>
+                      <div className="drawer-section-title" style={{ marginTop: 16 }}>Last {last7.length} Trips — Bar Chart</div>
+                      <div className="earnings-chart">
+                        {last7.map((trip, i) => {
+                          const heightPct = Math.round((trip.fare / maxFare) * 100);
+                          return (
+                            <div key={i} className="chart-bar-col">
+                              <div className="chart-bar-label">₹{trip.fare}</div>
+                              <div className="chart-bar-wrap">
+                                <div className="chart-bar" style={{ height: `${heightPct}%` }} />
+                              </div>
+                              <div className="chart-bar-time">
+                                {trip.date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  <div className="drawer-section-title" style={{ marginTop: 16 }}>Per-trip Breakdown</div>
+                  {tripHistory.length === 0 ? (
+                    <div style={{ color: "#555", fontSize: 13, textAlign: "center", padding: "20px 0" }}>No trips yet this session</div>
+                  ) : (
+                    <div className="earn-breakdown-list">
+                      {tripHistory.map((trip, i) => (
+                        <div key={i} className="earn-row">
+                          <div>
+                            <div style={{ fontSize: 13, color: "#ccc", fontWeight: 600 }}>
+                              {trip.dropoff.length > 28 ? trip.dropoff.slice(0, 28) + "…" : trip.dropoff}
+                            </div>
+                            <div style={{ fontSize: 11, color: "#666" }}>
+                              {trip.date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })} · {trip.rideType}
+                            </div>
+                          </div>
+                          <div className="earn-row-fare">+₹{trip.fare}</div>
+                        </div>
+                      ))}
+                      <div className="earn-total-row">
+                        <span>Total</span>
+                        <span className="earn-row-fare">₹{todayEarnings}</span>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* ─── Wallet tab ───────────────────────────────────── */}
+            {drawerTab === "wallet" && (
+              <>
+                <div className="drawer-section-title">Captain Wallet</div>
+                <div className="wallet-balance-card">
+                  <div style={{ fontSize: 13, color: "#aaa" }}>Available Balance</div>
+                  <div className="wallet-big-amt">₹{walletBalance}</div>
+                  <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>Earnings credited after each ride</div>
+                </div>
+
+                <div className="drawer-section-title" style={{ marginTop: 16 }}>Request Withdrawal</div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <input type="number" placeholder="Amount (min ₹100)"
+                    value={withdrawAmt} onChange={(e) => { setWithdrawAmt(e.target.value); setWithdrawMsg(""); }}
+                    style={{ flex: 1, padding: "10px 12px", background: "#1a1a1a", border: "1.5px solid #333", borderRadius: 10, color: "#fff", fontSize: 13, outline: "none" }} />
+                  <button onClick={requestWithdrawal}
+                    style={{ padding: "10px 14px", background: "#1db954", border: "none", borderRadius: 10, color: "#000", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
+                    Withdraw
+                  </button>
+                </div>
+                {withdrawMsg && <div style={{ fontSize: 12, color: withdrawMsg.startsWith("✅") ? "#1db954" : "#e53935", marginBottom: 12, padding: "6px 10px", background: withdrawMsg.startsWith("✅") ? "#0d2818" : "#1a0000", borderRadius: 8 }}>{withdrawMsg}</div>}
+
+                {walletTxns.length > 0 && (
+                  <>
+                    <div className="drawer-section-title" style={{ marginTop: 8 }}>Transaction History</div>
+                    <div className="earn-breakdown-list">
+                      {walletTxns.map((tx, i) => (
+                        <div key={i} className="earn-row">
+                          <div>
+                            <div style={{ fontSize: 13, color: "#ccc" }}>{tx.description || tx.type}</div>
+                            <div style={{ fontSize: 11, color: "#666" }}>
+                              {new Date(tx.created_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true })}
+                            </div>
+                          </div>
+                          <div style={{ color: tx.type === "credit" ? "#1db954" : "#e53935", fontWeight: 700 }}>
+                            {tx.type === "credit" ? "+" : "-"}₹{tx.amount}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </>
             )}
@@ -892,14 +1029,38 @@ const CaptainPage = () => {
                     </div>
                   </div>
                 </div>
-                <div style={{ fontSize: 12, color: "#888", marginBottom: 12, display: "flex", gap: 8 }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <span>{ride.rideType}</span>
                   {ride.paymentMethod && <span>{ride.paymentMethod === "cash" ? "💵 Cash" : "📲 UPI"}</span>}
                   {ride.scheduledAt && <span>📅 Scheduled</span>}
                   {ride.parcelWeight && (
                     <span style={{ color: "#1db954", fontWeight: 700 }}>📦 {ride.parcelWeight} kg Parcel</span>
                   )}
+                  {bidRequests[ride.rideId] && (
+                    <span style={{ color: "#f6ad55", fontWeight: 700 }}>💰 Rider bid ₹{bidRequests[ride.rideId]}</span>
+                  )}
                 </div>
+                {/* Bid respond UI */}
+                {bidRequests[ride.rideId] && (
+                  <div style={{ background: "#1a1200", border: "1px solid #f6ad55", borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, color: "#f6ad55", fontWeight: 700, marginBottom: 8 }}>
+                      Rider offered ₹{bidRequests[ride.rideId]} — respond:
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button onClick={(e) => { e.stopPropagation(); respondBid(ride.rideId, "accept"); }}
+                        style={{ padding: "7px 12px", background: "#1db954", border: "none", borderRadius: 8, color: "#000", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>✅ Accept</button>
+                      <button onClick={(e) => { e.stopPropagation(); respondBid(ride.rideId, "reject"); }}
+                        style={{ padding: "7px 12px", background: "#e53935", border: "none", borderRadius: 8, color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>❌ Decline</button>
+                      <input type="number" placeholder="Counter ₹"
+                        value={counterInputs[ride.rideId] || ""}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setCounterInputs((prev) => ({ ...prev, [ride.rideId]: e.target.value }))}
+                        style={{ width: 90, padding: "7px 10px", background: "#1a1a1a", border: "1px solid #f6ad55", borderRadius: 8, color: "#fff", fontSize: 12, outline: "none" }} />
+                      <button onClick={(e) => { e.stopPropagation(); respondBid(ride.rideId, "counter", counterInputs[ride.rideId]); }}
+                        style={{ padding: "7px 12px", background: "#f6ad55", border: "none", borderRadius: 8, color: "#000", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>↩ Counter</button>
+                    </div>
+                  </div>
+                )}
                 <div className="ride-card-actions">
                   <button className="accept-btn" onClick={(e) => { e.stopPropagation(); acceptRide(ride); }}>
                     ✅ Accept

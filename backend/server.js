@@ -15,6 +15,7 @@ const authRoutes = require("./routes/auth");
 const notificationRoutes = require("./notifications/notification.routes");
 const registerNotificationSocket = require("./notifications/notification.socket");
 const fleetRoutes = require("./fleet/fleet.routes");
+const walletRoutes = require("./wallet.routes");
 
 const app = express();
 const server = http.createServer(app);
@@ -78,6 +79,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/fleet", fleetRoutes);
+app.use("/api/wallet", walletRoutes);
 app.get("/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
 
 // ── PostgreSQL + auto-migrate ────────────────────────────────
@@ -424,16 +426,68 @@ io.on("connection", (socket) => {
         }
     });
 
-    socket.on("sos alert", (data) => {
+    socket.on("sos alert", async (data) => {
         console.warn(`🚨 SOS ALERT from Ride [${data.rideId}]: Rider feels unsafe!`);
-        // Broadcast to admin room (assuming one exists)
-        io.to("admins").emit("sos notification", {
-            rideId: data.rideId,
-            riderId: data.riderId,
-            captainId: data.captainId,
-            location: data.location,
-            timestamp: new Date()
-        });
+        // Persist to DB
+        try {
+            await pool.query(
+                `INSERT INTO sos_alerts (ride_id, rider_id, captain_id, location) VALUES ($1,$2,$3,$4)`,
+                [data.rideId || null, data.riderId || null, data.captainId || null, JSON.stringify(data.location || {})]
+            );
+        } catch (_) {}
+        const payload = { rideId: data.rideId, riderId: data.riderId, captainId: data.captainId, location: data.location, timestamp: new Date() };
+        io.to("admins").emit("sos notification", payload);
+        // Notify the captain that the rider triggered SOS
+        if (data.captainId) io.to(`captain:${data.captainId}`).emit("sos notification", payload);
+    });
+
+    // ── Captain broadcasts live location to rider ─────────────────
+    socket.on("captain:location", async ({ rideId, lat, lng }) => {
+        try {
+            const ride = await Ride.findById(rideId).catch(() => null);
+            if (!ride) return;
+            const payload = { rideId, lat, lng };
+            if (ride.riderId) io.to(`user:${ride.riderId}`).emit("captain:location", payload);
+            if (ride.riderSocketId) io.to(ride.riderSocketId).emit("captain:location", payload);
+        } catch (err) { console.error("captain:location error:", err.message); }
+    });
+
+    // ── Bid pricing: rider submits a bid ─────────────────────────
+    socket.on("ride:bid", async ({ rideId, bidPrice }) => {
+        try {
+            if (!rideId || !bidPrice || bidPrice < 10) return;
+            await pool.query(
+                `UPDATE rides SET bid_price = $1, bid_status = 'pending' WHERE id = $2`,
+                [bidPrice, rideId]
+            );
+            const ride = await Ride.findById(rideId).catch(() => null);
+            if (!ride) return;
+            // Broadcast updated bid to all captains in the vehicle room
+            const rideRoom = ride.rideType || "go";
+            io.to(rideRoom).emit("ride:bid_updated", { rideId, bidPrice, bidStatus: "pending" });
+            console.log(`💰 Bid ₹${bidPrice} placed on ride ${rideId}`);
+        } catch (err) { console.error("ride:bid error:", err.message); }
+    });
+
+    // ── Bid pricing: captain accepts / counters rider's bid ───────
+    socket.on("ride:bid_respond", async ({ rideId, action, counterPrice }) => {
+        try {
+            // action: 'accept' | 'counter' | 'reject'
+            if (!rideId || !action) return;
+            const bidStatus = action === "accept" ? "accepted" : action === "counter" ? "countered" : "rejected";
+            const updateFields = { bid_status: bidStatus };
+            if (action === "counter" && counterPrice) updateFields.bid_counter_price = counterPrice;
+            await pool.query(
+                `UPDATE rides SET bid_status = $1, bid_counter_price = $2 WHERE id = $3`,
+                [bidStatus, counterPrice || null, rideId]
+            );
+            const ride = await Ride.findById(rideId).catch(() => null);
+            if (!ride) return;
+            const payload = { rideId, action, bidStatus, counterPrice };
+            if (ride.riderId) io.to(`user:${ride.riderId}`).emit("ride:bid_response", payload);
+            if (ride.riderSocketId) io.to(ride.riderSocketId).emit("ride:bid_response", payload);
+            console.log(`💰 Bid ${action} for ride ${rideId}`);
+        } catch (err) { console.error("ride:bid_respond error:", err.message); }
     });
 
     /* ── Rental coordination ── */

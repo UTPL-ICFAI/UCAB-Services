@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import io from "socket.io-client";
 import MapView from "../components/MapView";
 import LocationSearch from "../components/LocationSearch";
@@ -110,6 +111,29 @@ const UserPage = () => {
 
   /* ─── Account drawer ──────────────────────────────────────── */
   const [showAccount, setShowAccount] = useState(false);
+  const [accountTab, setAccountTab] = useState("home"); // home | wallet | history
+
+  /* ─── Wallet state ────────────────────────────────────────── */
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [walletTxns, setWalletTxns] = useState([]);
+  const [topupAmt, setTopupAmt] = useState("");
+  const [promoCode, setPromoCode] = useState("");
+  const [promoDiscount, setPromoDiscount] = useState(0);
+  const [promoMsg, setPromoMsg] = useState("");
+  const [useWallet, setUseWallet] = useState(false);
+
+  /* ─── Ride history state ──────────────────────────────────── */
+  const [rideHistory, setRideHistory] = useState([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+
+  /* ─── ETA / live captain location ────────────────────────── */
+  const [captainEta, setCaptainEta] = useState(null);
+
+  /* ─── Bid pricing state ───────────────────────────────────── */
+  const [bidMode, setBidMode] = useState(false);
+  const [bidPrice, setBidPrice] = useState("");
+  const [bidStatus, setBidStatus] = useState(null);
+  const [bidCounter, setBidCounter] = useState(null);
 
   /* ─── Courier state ───────────────────────────────────────── */
   const [cFrom, setCFrom] = useState(null);
@@ -194,6 +218,21 @@ const UserPage = () => {
   const toastTimer = useRef(null);
   const currentRideId = useRef(null);   // tracks which rideId belongs to THIS rider
   const captainIdRef = useRef(null);    // DB id of the accepting captain (for rating)
+
+  /* ─── Load wallet + ride history on mount ─────────────────── */
+  useEffect(() => {
+    if (!tkn) return;
+    axios.get(`${BACKEND_URL}/api/wallet/balance`, { headers: { Authorization: `Bearer ${tkn}` } })
+      .then((r) => { setWalletBalance(r.data.balance || 0); setWalletTxns(r.data.transactions || []); })
+      .catch(() => {});
+  }, [tkn]);
+
+  useEffect(() => {
+    if (!user?._id) return;
+    axios.get(`${BACKEND_URL}/api/auth/user/trips?userId=${user._id}&limit=50`)
+      .then((r) => { setRideHistory(r.data.trips || []); setHistoryLoaded(true); })
+      .catch(() => setHistoryLoaded(true));
+  }, []);  // eslint-disable-line
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
   const [hoveredStar, setHoveredStar] = useState(0);
   const showToast = (msg) => {
@@ -278,11 +317,36 @@ const UserPage = () => {
       setRideStarted(true);
       setTimeout(() => setRideStarted(false), 4000);
     });
+
+    // Live captain location → update map pin + compute rough ETA
+    socket.on("captain:location", ({ lat, lng }) => {
+      setCaptainPos({ lat, lng });
+      if (pickup?.lat) {
+        const R = 6371;
+        const toR = (d) => (d * Math.PI) / 180;
+        const dLat = toR(lat - pickup.lat);
+        const dLon = toR(lng - pickup.lng);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(toR(pickup.lat)) * Math.cos(toR(lat)) * Math.sin(dLon / 2) ** 2;
+        const distKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        setCaptainEta(Math.max(1, Math.round(distKm / 0.3))); // ~18 km/h in city
+      }
+    });
+
+    // Bid responses from captain
+    socket.on("ride:bid_response", ({ action, bidStatus: bs, counterPrice }) => {
+      setBidStatus(bs);
+      if (bs === "accepted") showToast("✅ Captain accepted your bid price!");
+      else if (bs === "countered") { setBidCounter(counterPrice); showToast(`💰 Captain countered with ₹${counterPrice}. Accept?`); }
+      else if (bs === "rejected") showToast("❌ Captain rejected your bid. Try standard fare.");
+    });
+
     return () => {
       socket.off("captain:message");
       socket.off("ride:started");
+      socket.off("captain:location");
+      socket.off("ride:bid_response");
     };
-  }, [socket]);
+  }, [socket, pickup]);
 
   /* ─── Rating helpers ────────────────────────────────────── */
   const resetAfterRide = () => {
@@ -304,6 +368,60 @@ const UserPage = () => {
     setCaptainMessages([]);
     setRideStarted(false);
     setUserMsgInput("");
+    setCaptainEta(null);
+    setBidMode(false);
+    setBidPrice("");
+    setBidStatus(null);
+    setBidCounter(null);
+    setPromoDiscount(0);
+    setPromoCode("");
+    setPromoMsg("");
+  };
+
+  /* ─── Wallet helpers ───────────────────────────────────────── */
+  const topupWallet = async () => {
+    const amt = parseFloat(topupAmt);
+    if (!amt || amt < 1 || amt > 10000) { showToast("⚠️ Enter amount between ₹1 and ₹10000"); return; }
+    try {
+      const r = await axios.post(`${BACKEND_URL}/api/wallet/add`, { amount: amt }, { headers: { Authorization: `Bearer ${tkn}` } });
+      setWalletBalance(r.data.balance);
+      setWalletTxns((prev) => [{ type: "credit", amount: amt, description: "Wallet top-up", created_at: new Date().toISOString() }, ...prev]);
+      setTopupAmt("");
+      showToast(`✅ ₹${amt} added to wallet!`);
+    } catch (err) { showToast(`❌ ${err.response?.data?.message || "Top-up failed"}`); }
+  };
+
+  const applyPromo = async () => {
+    if (!promoCode.trim()) { showToast("⚠️ Enter a promo code"); return; }
+    try {
+      const r = await axios.post(`${BACKEND_URL}/api/wallet/apply-promo`, { code: promoCode, rideAmount: fare }, { headers: { Authorization: `Bearer ${tkn}` } });
+      setPromoDiscount(r.data.discount);
+      setPromoMsg(r.data.message);
+      showToast(r.data.message);
+    } catch (err) { setPromoMsg(""); setPromoDiscount(0); showToast(`❌ ${err.response?.data?.message || "Invalid promo code"}`); }
+  };
+
+  /* ─── Bid helpers ───────────────────────────────────────────── */
+  const submitBid = () => {
+    const bp = parseFloat(bidPrice);
+    if (!bp || bp < 10) { showToast("⚠️ Enter a valid bid (min ₹10)"); return; }
+    if (!currentRideId.current) { showToast("⚠️ Search for a ride first"); return; }
+    socket.emit("ride:bid", { rideId: currentRideId.current, bidPrice: bp });
+    setBidStatus("pending");
+    showToast(`💰 Bid of ₹${bp} submitted to captains!`);
+  };
+
+  const acceptCounterBid = () => {
+    if (!bidCounter || !currentRideId.current) return;
+    // Re-emit ride request with the counter price
+    if (lastRideParamsRef.current) {
+      const updatedParams = { ...lastRideParamsRef.current, fare: bidCounter };
+      lastRideParamsRef.current = updatedParams;
+      setDisplayFare(bidCounter);
+      socket.emit("new ride request", updatedParams);
+    }
+    setBidStatus("accepted");
+    showToast(`✅ Counter bid of ₹${bidCounter} accepted!`);
   };
 
   /* ─── Searching timer ──────────────────────────────────── */
@@ -353,17 +471,19 @@ const UserPage = () => {
         ? departureResult.depart.toISOString()
         : null;
 
+    const effectiveFare = Math.max(10, fare - promoDiscount);
     const params = {
       pickup: { ...pickup }, dropoff: { ...dropoff },
-      fare, distKm: routeInfo?.distKm || 5,
+      fare: effectiveFare, distKm: routeInfo?.distKm || 5,
       duration: routeInfo?.durationMin || 15,
-      rideType: rideType.id, paymentMethod: payMethod, scheduledAt,
+      rideType: rideType.id, paymentMethod: useWallet ? "wallet" : payMethod, scheduledAt,
       userId: user._id || null,
     };
     // Store BOTH the params and the original base fare separately
-    lastRideParamsRef.current = { ...params, _baseFare: fare };
+    lastRideParamsRef.current = { ...params, _baseFare: effectiveFare };
     setTipAmount(0);
-    setDisplayFare(fare);
+    setDisplayFare(effectiveFare);
+    setBidStatus(null);
 
     socket.emit("new ride request", params);
     if (scheduledAt) {
@@ -536,28 +656,50 @@ const UserPage = () => {
             <div className="drawer-handle" />
             <div className="drawer-header">
               <div className="drawer-avatar">{user.name?.[0]?.toUpperCase() || "U"}</div>
-              <div>
+              <div style={{ flex: 1 }}>
                 <div className="drawer-name">{user.name || "Rider"}</div>
                 <div className="drawer-phone">{user.phone || ""}</div>
               </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "#1db954" }}>₹{walletBalance.toFixed(0)}</div>
+                <div style={{ fontSize: 10, color: "#666" }}>Wallet</div>
+              </div>
             </div>
-            <div className="drawer-section-title">Payment Method</div>
-            <div className="pay-method-row">
-              {PAY_METHODS.map((p) => (
-                <div key={p.id}
-                  className={`pay-method-card ${payMethod === p.id ? "selected" : ""}`}
-                  onClick={() => setPayMethod(p.id)}>
-                  <span>{p.icon}</span> {p.label}
-                </div>
+
+            {/* Drawer tab bar */}
+            <div className="drawer-tabs">
+              {[{ id: "home", label: "🏠 Home" }, { id: "wallet", label: "💳 Wallet" }, { id: "history", label: "🕐 History" }].map((t) => (
+                <button key={t.id}
+                  className={`drawer-tab-btn ${accountTab === t.id ? "active" : ""}`}
+                  onClick={() => setAccountTab(t.id)}>
+                  {t.label}
+                </button>
               ))}
             </div>
-            <div className="drawer-section-title">Cancellation Policy</div>
-            <div className="cancel-policy-box">
-              <p>✅ Free cancellation within <strong>{CANCEL_FREE_MINS} min</strong> of captain accepting.</p>
-              <p>💸 <strong>₹{CANCEL_FEE} fee</strong> applies after {CANCEL_FREE_MINS} min.</p>
-              <p>🔄 No charge if captain cancels or none found.</p>
-            </div>
-            <div className="drawer-section-title">About Maps</div>
+
+            {/* ── Home tab ── */}
+            {accountTab === "home" && (<>
+              <div className="drawer-section-title">Payment Method</div>
+              <div className="pay-method-row">
+                {PAY_METHODS.map((p) => (
+                  <div key={p.id}
+                    className={`pay-method-card ${payMethod === p.id && !useWallet ? "selected" : ""}`}
+                    onClick={() => { setPayMethod(p.id); setUseWallet(false); }}>
+                    <span>{p.icon}</span> {p.label}
+                  </div>
+                ))}
+                <div className={`pay-method-card ${useWallet ? "selected" : ""}`}
+                  onClick={() => setUseWallet((v) => !v)}>
+                  <span>👛</span> Wallet {walletBalance > 0 && <span style={{ fontSize: 10, color: "#1db954" }}>₹{walletBalance.toFixed(0)}</span>}
+                </div>
+              </div>
+              <div className="drawer-section-title">Cancellation Policy</div>
+              <div className="cancel-policy-box">
+                <p>✅ Free cancellation within <strong>{CANCEL_FREE_MINS} min</strong> of captain accepting.</p>
+                <p>💸 <strong>₹{CANCEL_FEE} fee</strong> applies after {CANCEL_FREE_MINS} min.</p>
+                <p>🔄 No charge if captain cancels or none found.</p>
+              </div>
+              <div className="drawer-section-title">About Maps</div>
             <div className="cancel-policy-box" style={{ fontSize: 12, lineHeight: 1.7 }}>
               <p>🗺 <strong>OpenStreetMap</strong> — open-source tiles, no personal data.</p>
               <p>📍 <strong>Nominatim</strong> — only typed query sent, no tracking.</p>
@@ -566,7 +708,7 @@ const UserPage = () => {
             <button className="btn-primary" style={{ marginTop: 20, background: "#e74c3c" }}
               onClick={logout}>🚪 Logout</button>
 
-            {/* ── Quick links to new features ── */}
+            {/* ── Quick links ── */}
             <div style={{ marginTop: 16, borderTop: "1px solid #333", paddingTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ fontSize: 12, color: "#888", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>More Services</div>
               <button onClick={() => { setShowAccount(false); navigate("/notifications"); }}
@@ -577,15 +719,83 @@ const UserPage = () => {
                 style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, padding: "10px 14px", color: "#eee", cursor: "pointer", textAlign: "left", fontSize: 14 }}>
                 🗓️ Book Fleet Vehicles
               </button>
-              <button onClick={() => { setShowAccount(false); navigate("/fleet/register-owner"); }}
-                style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, padding: "10px 14px", color: "#eee", cursor: "pointer", textAlign: "left", fontSize: 14 }}>
-                🚌 Register Fleet Owner
-              </button>
-              <button onClick={() => { setShowAccount(false); navigate("/fleet/add-vehicle"); }}
-                style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, padding: "10px 14px", color: "#eee", cursor: "pointer", textAlign: "left", fontSize: 14 }}>
-                🚗 Add Fleet Vehicle
-              </button>
             </div>
+            </>)}
+
+            {/* ── Wallet tab ── */}
+            {accountTab === "wallet" && (<>
+              <div className="wallet-balance-card">
+                <div style={{ fontSize: 12, color: "#888" }}>Available Balance</div>
+                <div className="wallet-big-amt">₹{walletBalance.toFixed(2)}</div>
+              </div>
+              <div className="drawer-section-title">Add Money</div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                {[100, 200, 500].map((a) => (
+                  <button key={a} onClick={() => setTopupAmt(String(a))}
+                    className={`tip-btn${topupAmt === String(a) ? " active" : ""}`}>₹{a}</button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <input type="number" placeholder="Custom amount" value={topupAmt}
+                  onChange={(e) => setTopupAmt(e.target.value)}
+                  style={{ flex: 1, padding: "10px 12px", background: "#1a1a1a", border: "1.5px solid #333", borderRadius: 10, color: "#fff", fontSize: 14, outline: "none" }} />
+                <button className="book-btn-inline" style={{ fontSize: 13 }} onClick={topupWallet}>Add</button>
+              </div>
+              <div className="drawer-section-title">Recent Transactions</div>
+              {walletTxns.length === 0 ? <div style={{ color: "#555", fontSize: 13, textAlign: "center", padding: "12px 0" }}>No transactions yet</div> : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {walletTxns.map((tx, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: "#161616", borderRadius: 10, border: "1px solid #222" }}>
+                      <div>
+                        <div style={{ fontSize: 13, color: "#eee", fontWeight: 600 }}>{tx.description}</div>
+                        <div style={{ fontSize: 11, color: "#666" }}>{new Date(tx.created_at).toLocaleDateString("en-IN")}</div>
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: tx.type === "credit" || tx.type === "promo" ? "#1db954" : "#e53935" }}>
+                        {tx.type === "credit" || tx.type === "promo" ? "+" : "-"}₹{parseFloat(tx.amount).toFixed(0)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>)}
+
+            {/* ── History tab ── */}
+            {accountTab === "history" && (<>
+              <div className="drawer-section-title">My Rides ({rideHistory.length})</div>
+              {!historyLoaded ? <div style={{ color: "#555", textAlign: "center", padding: "12px 0" }}>Loading…</div>
+                : rideHistory.length === 0 ? (
+                  <div className="empty-state" style={{ paddingTop: 20 }}>
+                    <div className="empty-icon">🚗</div>
+                    <p>No rides yet</p>
+                    <span>Book your first ride!</span>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {rideHistory.map((t, i) => (
+                      <div key={t.id || i} className="trip-history-card">
+                        <div className="thc-top">
+                          <div className="thc-fare">₹{parseFloat(t.fare).toFixed(0)}</div>
+                          <div className="thc-meta">
+                            <span className="thc-type">{t.rideType?.toUpperCase()}</span>
+                            <span className={`thc-pay ${t.status === "cancelled" ? "red" : ""}`}>
+                              {t.status === "cancelled" ? "Cancelled" : t.payment === "cash" ? "💵 Cash" : "📲 UPI"}
+                            </span>
+                          </div>
+                          <div className="thc-time">{new Date(t.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</div>
+                        </div>
+                        <div className="thc-route">
+                          <div className="thc-row"><span className="trs-dot green" style={{ width: 8, height: 8, borderRadius: "50%", display: "inline-block", flexShrink: 0 }} />
+                            <span className="thc-addr">{t.pickup?.address || "Pickup"}</span></div>
+                          <div className="thc-row"><span className="trs-dot red" style={{ width: 8, height: 8, borderRadius: "50%", display: "inline-block", flexShrink: 0 }} />
+                            <span className="thc-addr">{t.dropoff?.address || "Dropoff"}</span></div>
+                        </div>
+                        {t.captain && <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>👤 {t.captain.name} · ⭐ {parseFloat(t.captain.rating).toFixed(1)}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+            </>)}
+
           </div>
         </div>
       )}
@@ -674,6 +884,13 @@ const UserPage = () => {
               <span className="otp-label">Share OTP with captain</span>
               <span className="otp-code">{tripOtp}</span>
             </div>
+            {/* ETA banner */}
+            {captainEta && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "8px 14px", background: "#0d2818", borderRadius: 10, marginBottom: 8, border: "1px solid #1db954" }}>
+                <span style={{ fontSize: 18 }}>🚗</span>
+                <span style={{ color: "#1db954", fontWeight: 700, fontSize: 14 }}>Captain arriving in ~{captainEta} min</span>
+              </div>
+            )}
             <div className="captain-card-uber">
               <div className="captain-avatar-big">
                 {captainInfo?.name?.[0]?.toUpperCase() || "C"}
@@ -688,7 +905,7 @@ const UserPage = () => {
                 </div>
               </div>
               <div className="captain-actions">
-                <button className="icon-btn" style={{ background: "#e53e3e" }}
+                <button className="icon-btn sos-btn"
                   onClick={() => {
                     socket.emit("sos alert", {
                       rideId: currentRideId.current,
@@ -1046,23 +1263,68 @@ const UserPage = () => {
                     <div className="fare-summary-row">
                       <div>
                         <div style={{ fontSize: 13, color: "#888" }}>Estimated fare</div>
-                        <div className="fare-amount">₹{fare + 1}</div>
+                        <div className="fare-amount">
+                          ₹{Math.max(10, fare - promoDiscount) + 1}
+                          {promoDiscount > 0 && <span style={{ fontSize: 12, color: "#1db954", marginLeft: 6, textDecoration: "line-through", opacity: 0.6 }}>₹{fare + 1}</span>}
+                        </div>
                         <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>
                           {routeInfo?.distKm} km · {routeInfo?.durationMin} min ·{" "}
-                          {PAY_METHODS.find((p) => p.id === payMethod)?.icon} {PAY_METHODS.find((p) => p.id === payMethod)?.label}
+                          {useWallet ? "👛 Wallet" : `${PAY_METHODS.find((p) => p.id === payMethod)?.icon} ${PAY_METHODS.find((p) => p.id === payMethod)?.label}`}
                         </div>
                         <div style={{ fontSize: 11, color: "#1db954", marginTop: 3, display: "flex", alignItems: "center", gap: 4 }}>
                           🛡️ Includes ₹1 insurance fee
-                          <span title="A ₹1 insurance fee is collected to provide you with a 10 Lakh accident and injury cover for the duration of your trip. This protects both you and the captain."
-                            style={{ cursor: "help", background: "#1a2a1a", borderRadius: 10, padding: "0 6px", fontSize: 10, border: "1px solid #1db954" }}>
-                            ? Why
-                          </span>
                         </div>
+                        {promoMsg && <div style={{ fontSize: 11, color: "#f6ad55", marginTop: 2 }}>{promoMsg}</div>}
                       </div>
                       <button className="book-btn-inline" onClick={requestRide}>
                         {bookingMode === "now" ? `Book ${rideType.icon}` : "📅 Schedule"}
                       </button>
                     </div>
+
+                    {/* ── Promo code ── */}
+                    <div className="promo-row">
+                      <input type="text" placeholder="🎁 Promo code" value={promoCode}
+                        onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoDiscount(0); setPromoMsg(""); }}
+                        style={{ flex: 1, padding: "9px 12px", background: "#1a1a1a", border: "1.5px solid #333", borderRadius: 10, color: "#fff", fontSize: 13, outline: "none" }} />
+                      <button onClick={applyPromo}
+                        style={{ padding: "9px 14px", background: "#333", border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
+                        Apply
+                      </button>
+                    </div>
+
+                    {/* ── Bid pricing (Rapido-style) ── */}
+                    <div className="bid-toggle-row" onClick={() => setBidMode((v) => !v)}>
+                      <span>💰 Name your price (Bid)</span>
+                      <span style={{ color: bidMode ? "#f6ad55" : "#888", fontSize: 13 }}>{bidMode ? "▲ Hide" : "▼ Show"}</span>
+                    </div>
+                    {bidMode && (
+                      <div className="bid-box">
+                        {bidStatus === "pending" && <div style={{ color: "#f6ad55", fontSize: 13, marginBottom: 8, textAlign: "center" }}>⏳ Waiting for captain to respond…</div>}
+                        {bidStatus === "accepted" && <div style={{ color: "#1db954", fontSize: 13, marginBottom: 8, textAlign: "center" }}>✅ Bid accepted! Captain will arrive shortly.</div>}
+                        {bidStatus === "rejected" && <div style={{ color: "#e53935", fontSize: 13, marginBottom: 8, textAlign: "center" }}>❌ Captain declined your bid. Try standard price.</div>}
+                        {bidStatus === "countered" && bidCounter && (
+                          <div style={{ marginBottom: 10 }}>
+                            <div style={{ color: "#f6ad55", fontSize: 13, textAlign: "center", marginBottom: 6 }}>
+                              Captain countered with <strong>₹{bidCounter}</strong>
+                            </div>
+                            <button onClick={acceptCounterBid} className="book-btn-inline" style={{ width: "100%", fontSize: 14 }}>
+                              ✅ Accept ₹{bidCounter}
+                            </button>
+                          </div>
+                        )}
+                        {(!bidStatus || bidStatus === "rejected") && (
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <input type="number" placeholder={`Min ₹10 · Suggest fare (est. ₹${fare})`}
+                              value={bidPrice} onChange={(e) => setBidPrice(e.target.value)}
+                              style={{ flex: 1, padding: "10px 12px", background: "#1a1a1a", border: "1.5px solid #f6ad55", borderRadius: 10, color: "#fff", fontSize: 13, outline: "none" }} />
+                            <button onClick={submitBid}
+                              style={{ padding: "10px 14px", background: "#f6ad55", border: "none", borderRadius: 10, color: "#000", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
+                              Bid
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </>
