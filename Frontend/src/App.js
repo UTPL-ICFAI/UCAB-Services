@@ -14,6 +14,9 @@ import FleetOwnerRegister from "./pages/fleet/FleetOwnerRegister";
 import FleetVehicleRegister from "./pages/fleet/FleetVehicleRegister";
 import FleetBookingPage from "./pages/fleet/FleetBookingPage";
 import RentalLoginPage from "./pages/RentalLoginPage";
+import AdminLoginPage from "./pages/AdminLoginPage";
+import AdminDashboard from "./pages/AdminDashboard";
+import TrackingPage from "./pages/TrackingPage";
 
 import "./App.css";
 
@@ -51,6 +54,13 @@ function App() {
         <Route path="/user" element={<PrivateRoute expectedRole="user">   <UserPage />    </PrivateRoute>} />
         <Route path="/captain" element={<PrivateRoute expectedRole="captain"><CaptainPage /> </PrivateRoute>} />
         <Route path="/fleet/dashboard" element={<FleetPrivateRoute><FleetOwnerDashboard /></FleetPrivateRoute>} />
+
+        {/* Admin */}
+        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+
+        {/* Public ride tracking */}
+        <Route path="/track/:shareToken" element={<TrackingPage />} />
 
         {/* Misc / public pages */}
         <Route path="/notifications" element={<NotificationsPage />} />

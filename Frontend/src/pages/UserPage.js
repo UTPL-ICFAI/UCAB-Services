@@ -45,6 +45,11 @@ const SUPPORT_CATEGORIES = [
   { id: "other",              label: "Other" },
 ];
 
+const RATING_TAGS = [
+  "Great Driver", "Clean Vehicle", "On Time", "Safe Driving",
+  "Friendly", "Good Navigation", "Smooth Ride",
+];
+
 const CANCEL_REASONS = [
   "Driver is too far away",
   "Changed my mind",
@@ -167,6 +172,22 @@ const UserPage = () => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
 
+  /* ─── P0 new state ────────────────────────────────────────── */
+  const [surgeMultiplier, setSurgeMultiplier] = useState(1);
+  const [savedPlaces, setSavedPlaces] = useState([]);
+  const [emergencyContacts, setEmergencyContacts] = useState([]);
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactPhone, setNewContactPhone] = useState("");
+  const [ratingTags, setRatingTags] = useState([]);
+  const [captainArrivedBanner, setCaptainArrivedBanner] = useState(false);
+  const [shareToken, setShareToken] = useState(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [recentSearches, setRecentSearches] = useState(
+    () => JSON.parse(localStorage.getItem("ucab_recent_searches") || "[]")
+  );
+  const [showRecentSearches, setShowRecentSearches] = useState(false);
+
   /* ─── Courier state ───────────────────────────────────────── */
   const [cFrom, setCFrom] = useState(null);
   const [cTo, setCTo] = useState(null);
@@ -250,6 +271,47 @@ const UserPage = () => {
   const toastTimer = useRef(null);
   const currentRideId = useRef(null);   // tracks which rideId belongs to THIS rider
   const captainIdRef = useRef(null);    // DB id of the accepting captain (for rating)
+
+  /* ─── P0: Load saved places, emergency contacts, surge on mount ─ */
+  useEffect(() => {
+    if (!tkn) return;
+    axios.get(`${BACKEND_URL}/api/auth/user/saved-places`, { headers: { Authorization: `Bearer ${tkn}` } })
+      .then((r) => setSavedPlaces(r.data.savedPlaces || [])).catch(() => {});
+    axios.get(`${BACKEND_URL}/api/auth/user/emergency-contacts`, { headers: { Authorization: `Bearer ${tkn}` } })
+      .then((r) => setEmergencyContacts(r.data.contacts || [])).catch(() => {});
+    axios.get(`${BACKEND_URL}/api/rides/surge`)
+      .then((r) => setSurgeMultiplier(r.data.multiplier || 1)).catch(() => {});
+  }, [tkn]);  // eslint-disable-line
+
+  /* ─── P0: Socket listeners for captain:arrived + share token ── */
+  useEffect(() => {
+    socket.on("captain:arrived", ({ captainName }) => {
+      setCaptainArrivedBanner(true);
+      showToast(`📍 ${captainName || "Captain"} has arrived at your pickup!`);
+      // Play a notification beep (Web Audio API — no file needed)
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 880; osc.type = "sine";
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+        osc.start(); osc.stop(ctx.currentTime + 0.8);
+      } catch (_) {}
+      setTimeout(() => setCaptainArrivedBanner(false), 8000);
+    });
+    socket.on("ride:share_token", ({ shareToken: t }) => {
+      setShareToken(t);
+      const link = `${window.location.origin}/track/${t}`;
+      navigator.clipboard?.writeText(link).catch(() => {});
+      showToast("🔗 Tracking link copied! Share it with friends or family.");
+    });
+    return () => {
+      socket.off("captain:arrived");
+      socket.off("ride:share_token");
+    };
+  }, [socket]);  // eslint-disable-line
 
   /* ─── Load wallet + ride history on mount ─────────────────── */
   useEffect(() => {
@@ -490,6 +552,83 @@ const UserPage = () => {
     }
   };
 
+  /* ─── P0 Helpers ─────────────────────────────────────────── */
+
+  // GPS auto-detect pickup using browser geolocation + Nominatim reverse-geocode
+  const detectGPS = () => {
+    if (!navigator.geolocation) { showToast("⚠️ Geolocation not supported"); return; }
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        try {
+          const r = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            { headers: { "Accept-Language": "en" } }
+          );
+          const data = await r.json();
+          const address = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          const short = address.split(",").slice(0, 3).join(",").trim();
+          setPickup({ lat, lng, address: short });
+          showToast("📍 Location detected!");
+        } catch {
+          setPickup({ lat, lng, address: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
+        }
+        setGpsLoading(false);
+      },
+      (err) => { setGpsLoading(false); showToast(`⚠️ ${err.message || "Could not get location"}`); },
+      { timeout: 10000, maximumAge: 60000, enableHighAccuracy: true }
+    );
+  };
+
+  // Save a search to localStorage recent history
+  const saveRecentSearch = (location) => {
+    if (!location?.address) return;
+    const next = [location, ...recentSearches.filter((s) => s.address !== location.address)].slice(0, 5);
+    setRecentSearches(next);
+    localStorage.setItem("ucab_recent_searches", JSON.stringify(next));
+  };
+
+  // Save current pickup as a named place
+  const saveCurrentPlace = async (label) => {
+    if (!pickup) { showToast("⚠️ Set a pickup location first"); return; }
+    try {
+      const r = await axios.post(
+        `${BACKEND_URL}/api/auth/user/saved-places`,
+        { label, lat: pickup.lat, lng: pickup.lng, address: pickup.address },
+        { headers: { Authorization: `Bearer ${tkn}` } }
+      );
+      setSavedPlaces(r.data.savedPlaces);
+      showToast(`✅ Saved as "${label}"`);
+    } catch { showToast("❌ Could not save place"); }
+  };
+
+  const deleteSavedPlace = async (idx) => {
+    try {
+      const r = await axios.delete(`${BACKEND_URL}/api/auth/user/saved-places/${idx}`, { headers: { Authorization: `Bearer ${tkn}` } });
+      setSavedPlaces(r.data.savedPlaces);
+    } catch { showToast("❌ Could not remove place"); }
+  };
+
+  const saveEmergencyContacts = async (contacts) => {
+    try {
+      const r = await axios.put(`${BACKEND_URL}/api/auth/user/emergency-contacts`, { contacts }, { headers: { Authorization: `Bearer ${tkn}` } });
+      setEmergencyContacts(r.data.contacts);
+      showToast("✅ Emergency contacts saved");
+    } catch { showToast("❌ Could not save contacts"); }
+  };
+
+  const shareTrip = () => {
+    if (!currentRideId.current) { showToast("⚠️ No active ride to share"); return; }
+    if (shareToken) {
+      const link = `${window.location.origin}/track/${shareToken}`;
+      navigator.clipboard?.writeText(link).catch(() => {});
+      showToast("🔗 Tracking link copied again!");
+      return;
+    }
+    socket.emit("ride:share", { rideId: currentRideId.current });
+  };
+
   /* ─── Searching timer ──────────────────────────────────── */
   useEffect(() => {
     if (rideStatus === "searching") {
@@ -510,9 +649,11 @@ const UserPage = () => {
         captainId: captainIdRef.current,
         rideId: currentRideId.current,
         rating: stars,
+        tags: ratingTags,
       });
     }
     setRatingSubmitted(true);
+    setRatingTags([]);
     showToast(`⭐ Thanks for rating ${stars} star${stars !== 1 ? "s" : ""} !`);
     setTimeout(resetAfterRide, 1500);
   };
@@ -740,7 +881,12 @@ const UserPage = () => {
 
             {/* Drawer tab bar */}
             <div className="drawer-tabs">
-              {[{ id: "home", label: "🏠 Home" }, { id: "wallet", label: "💳 Wallet" }, { id: "history", label: "🕐 History" }].map((t) => (
+              {[
+                { id: "home", label: "🏠 Home" },
+                { id: "wallet", label: "💳 Wallet" },
+                { id: "history", label: "🕐 History" },
+                { id: "places", label: "📍 Places" },
+              ].map((t) => (
                 <button key={t.id}
                   className={`drawer-tab-btn ${accountTab === t.id ? "active" : ""}`}
                   onClick={() => setAccountTab(t.id)}>
@@ -877,11 +1023,81 @@ const UserPage = () => {
                 )}
             </>)}
 
+            {/* ── Places tab ── */}
+            {accountTab === "places" && (<>
+              {/* Saved Places */}
+              <div className="drawer-section-title">⭐ Saved Places</div>
+              {savedPlaces.length === 0
+                ? <div style={{ color: "#555", fontSize: 13, textAlign: "center", padding: "10px 0" }}>No saved places yet</div>
+                : savedPlaces.map((sp, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "#161616", borderRadius: 10, border: "1px solid #222", marginBottom: 8 }}>
+                    <span style={{ fontSize: 20 }}>{sp.label.toLowerCase() === "home" ? "🏠" : sp.label.toLowerCase() === "work" ? "💼" : "📌"}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, color: "#eee", fontSize: 14 }}>{sp.label}</div>
+                      <div style={{ color: "#666", fontSize: 11 }}>{sp.address.slice(0, 40)}{sp.address.length > 40 ? "…" : ""}</div>
+                    </div>
+                    <button onClick={() => deleteSavedPlace(i)}
+                      style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16 }}>🗑️</button>
+                  </div>
+                ))
+              }
+              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                {["Home", "Work", "Gym", "Other"].map((lbl) => (
+                  <button key={lbl} onClick={() => saveCurrentPlace(lbl)}
+                    style={{ padding: "8px 14px", background: "#1a1a1a", border: "1px solid #333", borderRadius: 20, color: "#ccc", fontSize: 12, cursor: "pointer" }}>
+                    + Save as {lbl}
+                  </button>
+                ))}
+              </div>
+
+              {/* Emergency Contacts */}
+              <div className="drawer-section-title" style={{ marginTop: 20 }}>🆘 Emergency Contacts (SOS)</div>
+              <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>People who can be contacted if you trigger SOS during a ride.</div>
+              {emergencyContacts.length === 0
+                ? <div style={{ color: "#555", fontSize: 13, textAlign: "center", padding: "10px 0" }}>No emergency contacts added</div>
+                : emergencyContacts.map((c, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "#161616", borderRadius: 10, border: "1px solid #222", marginBottom: 8 }}>
+                    <span style={{ fontSize: 20 }}>👤</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, color: "#eee", fontSize: 14 }}>{c.name}</div>
+                      <div style={{ color: "#666", fontSize: 12 }}>{c.phone}</div>
+                    </div>
+                    <a href={`tel:${c.phone}`}
+                      style={{ background: "#0e2b1a", border: "1px solid #1db954", borderRadius: 8, padding: "6px 10px", color: "#1db954", fontSize: 12, textDecoration: "none" }}>
+                      📞 Call
+                    </a>
+                  </div>
+                ))
+              }
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                <input placeholder="Name" value={newContactName} onChange={(e) => setNewContactName(e.target.value)}
+                  style={{ padding: "10px 12px", background: "#1a1a1a", border: "1.5px solid #333", borderRadius: 10, color: "#fff", fontSize: 13, outline: "none" }} />
+                <input placeholder="Phone number" value={newContactPhone} onChange={(e) => setNewContactPhone(e.target.value)} type="tel"
+                  style={{ padding: "10px 12px", background: "#1a1a1a", border: "1.5px solid #333", borderRadius: 10, color: "#fff", fontSize: 13, outline: "none" }} />
+                <button onClick={() => {
+                  if (!newContactName.trim() || !newContactPhone.trim()) { showToast("⚠️ Enter name and phone"); return; }
+                  const updated = [...emergencyContacts, { name: newContactName.trim(), phone: newContactPhone.trim() }];
+                  saveEmergencyContacts(updated);
+                  setNewContactName(""); setNewContactPhone("");
+                }}
+                  style={{ padding: "11px", background: "#1db954", border: "none", borderRadius: 10, color: "#000", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>
+                  + Add Contact
+                </button>
+                {emergencyContacts.length > 0 && (
+                  <button onClick={() => {
+                    const updated = emergencyContacts.slice(0, -1);
+                    saveEmergencyContacts(updated);
+                  }}
+                    style={{ padding: "9px", background: "transparent", border: "1px solid #333", borderRadius: 10, color: "#888", cursor: "pointer", fontSize: 13 }}>
+                    Remove Last Contact
+                  </button>
+                )}
+              </div>
+            </>)}
+
           </div>
         </div>
-      )}
-
-      {/* ── Trip / status sheets (override bottom sheet when active) ── */}
+      }}
       {rideStatus === "searching" && (
         <div className="trip-sheet searching-sheet">
           <div className="trip-sheet-inner">
@@ -961,6 +1177,18 @@ const UserPage = () => {
                 </div>
               </div>
             )}
+            {/* ── Captain Arrived banner ── */}
+            {captainArrivedBanner && (
+              <div style={{ background: "#0d2818", border: "1.5px solid #1db954", borderRadius: 12, padding: "12px 14px", marginBottom: 10, display: "flex", alignItems: "center", gap: 10, animation: "rideStartFade 0.4s ease" }}>
+                <span style={{ fontSize: 28 }}>📍</span>
+                <div>
+                  <div style={{ color: "#1db954", fontWeight: 800, fontSize: 15 }}>Captain has arrived!</div>
+                  <div style={{ color: "#888", fontSize: 12 }}>Head to your pickup point with your OTP ready.</div>
+                </div>
+                <button onClick={() => setCaptainArrivedBanner(false)}
+                  style={{ marginLeft: "auto", background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer" }}>✕</button>
+              </div>
+            )}
             <div className="otp-banner">
               <span className="otp-label">Share OTP with captain</span>
               <span className="otp-code">{tripOtp}</span>
@@ -973,8 +1201,11 @@ const UserPage = () => {
               </div>
             )}
             <div className="captain-card-uber">
-              <div className="captain-avatar-big">
-                {captainInfo?.name?.[0]?.toUpperCase() || "C"}
+              <div className="captain-avatar-big" style={{ position: "relative", overflow: "hidden", background: captainInfo?.photoUrl ? "transparent" : undefined }}>
+                {captainInfo?.photoUrl
+                  ? <img src={captainInfo.photoUrl} alt="captain" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                  : captainInfo?.name?.[0]?.toUpperCase() || "C"
+                }
               </div>
               <div className="captain-details">
                 <div className="captain-name-big">{captainInfo?.name || currentRide.captainName || "Your Captain"}</div>
@@ -1107,6 +1338,17 @@ const UserPage = () => {
                 </button>
               </div>
             </div>
+            {/* ── Share trip + actions row ── */}
+            <div style={{ display: "flex", gap: 8, marginTop: 10, marginBottom: 4 }}>
+              <button onClick={shareTrip}
+                style={{ flex: 1, padding: "11px", background: "#0e2b1a", border: "1px solid #1db954", borderRadius: 12, color: "#1db954", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                🔗 Share Trip
+              </button>
+              <button onClick={() => openSupportModal({ id: currentRideId.current }, "safety")}
+                style={{ flex: 1, padding: "11px", background: "#1a0000", border: "1px solid #e53935", borderRadius: 12, color: "#e53935", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                🆘 Report Issue
+              </button>
+            </div>
             <button className="cancel-btn" onClick={cancelRide}>Cancel Ride</button>
           </div>
         </div>
@@ -1148,6 +1390,25 @@ const UserPage = () => {
 
             <div style={{ color: "#666", fontSize: 12, marginBottom: 16 }}>
               Tap a star to rate · your feedback helps improve quality
+            </div>
+
+            {/* ── Feedback tags ── */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginBottom: 16 }}>
+              {RATING_TAGS.map((tag) => (
+                <button key={tag}
+                  onClick={() => setRatingTags((prev) =>
+                    prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+                  )}
+                  style={{
+                    padding: "7px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer",
+                    background: ratingTags.includes(tag) ? "#0e2b1a" : "#1a1a1a",
+                    border: `1.5px solid ${ratingTags.includes(tag) ? "#1db954" : "#333"}`,
+                    color: ratingTags.includes(tag) ? "#1db954" : "#888",
+                    transition: "all 0.15s",
+                  }}>
+                  {ratingTags.includes(tag) ? "✓ " : ""}{tag}
+                </button>
+              ))}
             </div>
 
             {/* Fare summary */}
@@ -1245,12 +1506,55 @@ const UserPage = () => {
                 <div className="sheet-greeting">
                   <h2>Where to, {user.name?.split(" ")[0] || "Rider"}?</h2>
                 </div>
-                <div className="location-card">
-                  <LocationSearch placeholder="📍 Pickup location" dotColor="green"
-                    onSelect={setPickup} value={pickup?.address || ""} />
+
+                {/* ── Saved places quick-select ── */}
+                {savedPlaces.length > 0 && (
+                  <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                    {savedPlaces.map((sp, i) => (
+                      <button key={i}
+                        onClick={() => { setPickup({ lat: sp.lat, lng: sp.lng, address: sp.address }); setShowRecentSearches(false); }}
+                        className="saved-place-chip">
+                        {sp.label.toLowerCase() === "home" ? "🏠" : sp.label.toLowerCase() === "work" ? "💼" : "📌"} {sp.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="location-card" style={{ position: "relative" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ flex: 1 }}>
+                      <LocationSearch placeholder="📍 Pickup location" dotColor="green"
+                        onSelect={(loc) => { setPickup(loc); saveRecentSearch(loc); setShowRecentSearches(false); }}
+                        onFocus={() => setShowRecentSearches(true)}
+                        value={pickup?.address || ""} />
+                    </div>
+                    <button onClick={detectGPS} disabled={gpsLoading}
+                      title="Use my current location"
+                      style={{ padding: "9px 11px", background: gpsLoading ? "#222" : "#1a2b1a", border: "1.5px solid #1db954", borderRadius: 10, color: "#1db954", cursor: gpsLoading ? "wait" : "pointer", fontSize: 18, lineHeight: 1, flexShrink: 0 }}>
+                      {gpsLoading ? "⏳" : "🎯"}
+                    </button>
+                  </div>
+
+                  {/* Recent searches dropdown */}
+                  {showRecentSearches && recentSearches.length > 0 && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100, background: "#111", border: "1px solid #333", borderRadius: 12, marginTop: 4, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.6)" }}>
+                      <div style={{ fontSize: 11, color: "#666", padding: "8px 12px 4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Recent</div>
+                      {recentSearches.map((s, i) => (
+                        <div key={i}
+                          onClick={() => { setPickup(s); setShowRecentSearches(false); }}
+                          style={{ padding: "10px 14px", cursor: "pointer", borderTop: "1px solid #1e1e1e", display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#ccc" }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "#1a1a1a"}
+                          onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                          <span style={{ color: "#555" }}>🕐</span> {s.address}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="location-divider" />
                   <LocationSearch placeholder="🏁 Destination" dotColor="red"
-                    onSelect={setDropoff} value={dropoff?.address || ""} />
+                    onSelect={(loc) => { setDropoff(loc); saveRecentSearch(loc); }}
+                    value={dropoff?.address || ""} />
                 </div>
                 {routeInfo && (
                   <div className="route-badge">
@@ -1332,18 +1636,29 @@ const UserPage = () => {
                       </div>
                     )}
 
-                    <div className="section-title">Choose a ride</div>
+                    <div className="section-title">
+                      Choose a ride
+                      {surgeMultiplier > 1 && (
+                        <span className="surge-badge">⚡ {surgeMultiplier}x Surge</span>
+                      )}
+                    </div>
                     <div className="ride-types">
-                      {RIDE_TYPES.map((type) => (
-                        <div key={type.id}
-                          className={`ride-type-card ${selectedType === type.id ? "selected" : ""}`}
-                          onClick={() => setSelectedType(type.id)}>
-                          <div className="ride-type-icon">{type.icon}</div>
-                          <div className="ride-type-name">{type.name}</div>
-                          <div className="ride-type-time">{type.time}</div>
-                          <div className="ride-type-fare">₹{calcFare(type, routeInfo?.distKm)}</div>
-                        </div>
-                      ))}
+                      {RIDE_TYPES.map((type) => {
+                        const surgeFare = Math.round(calcFare(type, routeInfo?.distKm) * surgeMultiplier);
+                        return (
+                          <div key={type.id}
+                            className={`ride-type-card ${selectedType === type.id ? "selected" : ""}`}
+                            onClick={() => setSelectedType(type.id)}>
+                            <div className="ride-type-icon">{type.icon}</div>
+                            <div className="ride-type-name">{type.name}</div>
+                            <div className="ride-type-time">{type.time}</div>
+                            <div className="ride-type-fare" style={{ color: surgeMultiplier > 1 ? "#f6ad55" : undefined }}>
+                              ₹{surgeFare}
+                              {surgeMultiplier > 1 && <div style={{ fontSize: 9, color: "#888", textDecoration: "line-through" }}>₹{calcFare(type, routeInfo?.distKm)}</div>}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
 
                     <div className="fare-summary-row">

@@ -54,6 +54,11 @@ const CaptainPage = () => {
   const [bidRequests, setBidRequests] = useState({}); // rideId -> bidPrice
   const [counterInputs, setCounterInputs] = useState({}); // rideId -> counterVal
 
+  /* ─── P0: Captain photo + arrived ───────────────────────── */
+  const [photoUrl, setPhotoUrl] = useState(user.photoUrl || "");
+  const [photoSaveMsg, setPhotoSaveMsg] = useState("");
+  const [arrivedSent, setArrivedSent] = useState(false);
+
   /* ─── Location broadcast (ETA for rider) ────────────────── */
   const locationIntervalRef = useRef(null);
 
@@ -253,6 +258,7 @@ const CaptainPage = () => {
     setMsgInput("");
     setRideStartedConfirmed(false);
     setUserMessages([]);
+    setArrivedSent(false);
     showToast("✅ Ride accepted! Head to pickup.");
     // Begin broadcasting location to rider for ETA
     clearInterval(locationIntervalRef.current);
@@ -404,6 +410,11 @@ const CaptainPage = () => {
               </div>
             </div>
 
+            {/* Captain photo in header */}
+            {photoUrl && (
+              <img src={photoUrl} alt="captain" style={{ width: 60, height: 60, borderRadius: "50%", objectFit: "cover", border: "2px solid #1db954", marginBottom: 8, display: "block", marginLeft: "auto", marginRight: "auto" }} />
+            )}
+
             {/* Drawer tab bar */}
             <div className="drawer-tabs">
               {[
@@ -484,6 +495,29 @@ const CaptainPage = () => {
                     <div className="cap-stat-lbl">Pending</div>
                   </div>
                 </div>
+
+                {/* Photo URL update */}
+                <div className="drawer-section-title" style={{ marginTop: 16 }}>Profile Photo</div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                  <input
+                    type="url"
+                    placeholder="Photo URL (https://...)"
+                    value={photoUrl}
+                    onChange={(e) => { setPhotoUrl(e.target.value); setPhotoSaveMsg(""); }}
+                    style={{ flex: 1, padding: "10px 12px", background: "#1a1a1a", border: "1.5px solid #333", borderRadius: 10, color: "#fff", fontSize: 13, outline: "none" }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (!photoUrl.startsWith("https://")) { setPhotoSaveMsg("URL must start with https://"); return; }
+                      axios.put(`${BACKEND_URL}/api/auth/captain/photo`, { photoUrl }, { headers: { Authorization: `Bearer ${tkn}` } })
+                        .then(() => { setPhotoSaveMsg("✅ Photo saved!"); const s = JSON.parse(localStorage.getItem("ucab_user") || "{}"); localStorage.setItem("ucab_user", JSON.stringify({ ...s, photoUrl })); })
+                        .catch(() => setPhotoSaveMsg("Failed to save"));
+                    }}
+                    style={{ padding: "10px 14px", background: "#1db954", border: "none", borderRadius: 10, color: "#000", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
+                    Save
+                  </button>
+                </div>
+                {photoSaveMsg && <div style={{ fontSize: 12, color: photoSaveMsg.startsWith("✅") ? "#1db954" : "#e53935", marginBottom: 10 }}>{photoSaveMsg}</div>}
 
                 <button className="btn-primary" style={{ marginTop: 20, background: "#e74c3c" }}
                   onClick={logout}>🚪 Logout</button>
@@ -741,6 +775,26 @@ const CaptainPage = () => {
                 <div style={{ fontSize: 13, color: "#eee" }}>Phone: <strong>{acceptedRide.receiverPhone}</strong></div>
               </div>
             )}
+            {/* ── I've Arrived button (before OTP) ── */}
+            {!otpVerified && (
+              <button
+                onClick={() => {
+                  if (arrivedSent) return;
+                  socket.emit("captain:arrived", { rideId: acceptedRide?.rideId });
+                  setArrivedSent(true);
+                  showToast("📍 Rider notified that you've arrived!");
+                }}
+                style={{
+                  width: "100%", padding: "13px", marginTop: 12, marginBottom: 4,
+                  background: arrivedSent ? "#0e2b1a" : "#0e2b1a",
+                  border: `1.5px solid ${arrivedSent ? "#555" : "#1db954"}`,
+                  borderRadius: 12, color: arrivedSent ? "#555" : "#1db954",
+                  fontWeight: 800, fontSize: 15, cursor: arrivedSent ? "default" : "pointer",
+                }}>
+                {arrivedSent ? "✅ Arrived notification sent" : "📍 I've Arrived at Pickup"}
+              </button>
+            )}
+
             {/* ── OTP Verification (Uber-style) ── */}
             <div style={{
               marginTop: 14,

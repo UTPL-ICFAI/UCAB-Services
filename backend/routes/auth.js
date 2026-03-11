@@ -262,4 +262,101 @@ router.get("/user/trips", async (req, res) => {
     }
 });
 
+// ── Simple JWT auth middleware (reused below) ───────────────
+const JWT_SECRET_LOCAL = process.env.JWT_SECRET || "ucab_secret_2026";
+const authMw = (req, res, next) => {
+    const header = req.headers.authorization;
+    if (!header) return res.status(401).json({ message: "No token" });
+    try {
+        req.user = require("jsonwebtoken").verify(header.replace("Bearer ", ""), JWT_SECRET_LOCAL);
+        next();
+    } catch { res.status(401).json({ message: "Invalid token" }); }
+};
+
+// ============================================================
+//  USER — Saved Places  (Home, Work, or custom label)
+//  GET  /api/auth/user/saved-places
+//  POST /api/auth/user/saved-places         { label, lat, lng, address }
+//  DELETE /api/auth/user/saved-places/:idx
+// ============================================================
+router.get("/user/saved-places", authMw, async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            "SELECT saved_places FROM users WHERE id = $1", [req.user.id]
+        );
+        res.json({ savedPlaces: rows[0]?.saved_places || [] });
+    } catch (err) { res.status(500).json({ message: "Server error" }); }
+});
+
+router.post("/user/saved-places", authMw, async (req, res) => {
+    try {
+        const { label, lat, lng, address } = req.body;
+        if (!label || !lat || !lng) return res.status(400).json({ message: "label, lat, lng required" });
+        const { rows } = await pool.query(
+            "SELECT saved_places FROM users WHERE id = $1", [req.user.id]
+        );
+        const current = rows[0]?.saved_places || [];
+        // Replace if same label exists, otherwise append (max 10)
+        const filtered = current.filter((p) => p.label?.toLowerCase() !== label.toLowerCase());
+        const updated = [...filtered, { label, lat: parseFloat(lat), lng: parseFloat(lng), address: address || "" }].slice(-10);
+        await pool.query("UPDATE users SET saved_places = $1 WHERE id = $2", [JSON.stringify(updated), req.user.id]);
+        res.json({ savedPlaces: updated });
+    } catch (err) { res.status(500).json({ message: "Server error" }); }
+});
+
+router.delete("/user/saved-places/:idx", authMw, async (req, res) => {
+    try {
+        const idx = parseInt(req.params.idx, 10);
+        const { rows } = await pool.query("SELECT saved_places FROM users WHERE id = $1", [req.user.id]);
+        const current = rows[0]?.saved_places || [];
+        if (idx < 0 || idx >= current.length) return res.status(400).json({ message: "Invalid index" });
+        const updated = current.filter((_, i) => i !== idx);
+        await pool.query("UPDATE users SET saved_places = $1 WHERE id = $2", [JSON.stringify(updated), req.user.id]);
+        res.json({ savedPlaces: updated });
+    } catch (err) { res.status(500).json({ message: "Server error" }); }
+});
+
+// ============================================================
+//  USER — Emergency Contacts
+//  GET /api/auth/user/emergency-contacts
+//  PUT /api/auth/user/emergency-contacts    { contacts: [{name, phone}] }
+// ============================================================
+router.get("/user/emergency-contacts", authMw, async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            "SELECT emergency_contacts FROM users WHERE id = $1", [req.user.id]
+        );
+        res.json({ contacts: rows[0]?.emergency_contacts || [] });
+    } catch (err) { res.status(500).json({ message: "Server error" }); }
+});
+
+router.put("/user/emergency-contacts", authMw, async (req, res) => {
+    try {
+        const { contacts } = req.body;
+        if (!Array.isArray(contacts)) return res.status(400).json({ message: "contacts must be array" });
+        const safe = contacts
+            .filter((c) => c.name && c.phone)
+            .map((c) => ({ name: String(c.name).slice(0, 50), phone: String(c.phone).slice(0, 15) }))
+            .slice(0, 5);
+        await pool.query("UPDATE users SET emergency_contacts = $1 WHERE id = $2", [JSON.stringify(safe), req.user.id]);
+        res.json({ contacts: safe });
+    } catch (err) { res.status(500).json({ message: "Server error" }); }
+});
+
+// ============================================================
+//  CAPTAIN — Update profile photo
+//  PUT /api/auth/captain/photo  { photoUrl }
+// ============================================================
+router.put("/captain/photo", authMw, async (req, res) => {
+    try {
+        if (req.user.role !== "captain") return res.status(403).json({ message: "Captain only" });
+        const { photoUrl } = req.body;
+        if (!photoUrl) return res.status(400).json({ message: "photoUrl required" });
+        // Only allow https URLs to prevent XSS via javascript: URIs
+        if (!photoUrl.startsWith("https://")) return res.status(400).json({ message: "Must be an https URL" });
+        await pool.query("UPDATE captains SET photo_url = $1 WHERE id = $2", [photoUrl, req.user.id]);
+        res.json({ photoUrl });
+    } catch (err) { res.status(500).json({ message: "Server error" }); }
+});
+
 module.exports = router;

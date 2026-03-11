@@ -17,6 +17,7 @@ const registerNotificationSocket = require("./notifications/notification.socket"
 const fleetRoutes = require("./fleet/fleet.routes");
 const walletRoutes = require("./wallet.routes");
 const supportRoutes = require("./support.routes");
+const adminRoutes = require("./admin.routes");
 
 const app = express();
 const server = http.createServer(app);
@@ -82,7 +83,67 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/fleet", fleetRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/support", supportRoutes);
+app.use("/api/admin", adminRoutes);
 app.get("/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
+
+// ── In-memory: last known captain location per rideId (for tracking) ────────
+const rideTracking = new Map(); // rideId -> { lat, lng, captainName, updatedAt }
+
+// ── Public ride tracking endpoint ────────────────────────────────────────────
+app.get("/api/rides/track/:shareToken", async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            `SELECT r.id, r.status, r.pickup, r.dropoff, r.ride_type,
+                    c.name AS captain_name, c.vehicle_model, c.vehicle_color, c.vehicle_plate
+             FROM rides r LEFT JOIN captains c ON r.captain_id = c.id
+             WHERE r.share_token = $1`,
+            [req.params.shareToken]
+        );
+        if (!rows[0]) return res.status(404).json({ message: "Tracking link not found or expired" });
+        const ride = rows[0];
+        const loc = rideTracking.get(ride.id);
+        res.json({
+            rideId: ride.id,
+            status: ride.status,
+            pickup: ride.pickup,
+            dropoff: ride.dropoff,
+            rideType: ride.ride_type,
+            captain: {
+                name: ride.captain_name,
+                vehicle: `${ride.vehicle_color || ""} ${ride.vehicle_model || ""}`.trim(),
+                plate: ride.vehicle_plate,
+            },
+            captainLocation: loc ? { lat: loc.lat, lng: loc.lng, updatedAt: loc.updatedAt } : null,
+        });
+    } catch (err) {
+        console.error("track error:", err.message);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
+// ── Surge: compute multiplier based on demand/supply ratio ───────────────────
+async function computeSurge() {
+    try {
+        const { rows: setting } = await pool.query("SELECT multiplier, auto_surge FROM surge_settings WHERE id = 1");
+        if (!setting[0]?.auto_surge) return parseFloat(setting[0]?.multiplier || 1);
+        // Count pending rides vs online captains in the last 5 min
+        const [{ rows: pending }, { rows: online }] = await Promise.all([
+            pool.query("SELECT COUNT(*) FROM rides WHERE status='requested' AND created_at > NOW() - INTERVAL '5 minutes'"),
+            pool.query("SELECT COUNT(*) FROM captains WHERE is_online = TRUE"),
+        ]);
+        const pCount = parseInt(pending[0].count);
+        const oCount = Math.max(parseInt(online[0].count), 1);
+        const ratio = pCount / oCount;
+        if (ratio > 3) return 2.0;
+        if (ratio > 2) return 1.5;
+        if (ratio > 1) return 1.2;
+        return 1.0;
+    } catch { return 1.0; }
+}
+app.get("/api/rides/surge", async (_req, res) => {
+    const multiplier = await computeSurge();
+    res.json({ multiplier });
+});
 
 // ── PostgreSQL + auto-migrate ────────────────────────────────
 const fs = require("fs");
@@ -448,10 +509,44 @@ io.on("connection", (socket) => {
         try {
             const ride = await Ride.findById(rideId).catch(() => null);
             if (!ride) return;
+            // Store in memory for public tracking page
+            rideTracking.set(ride.id.toString(), { lat, lng, updatedAt: Date.now() });
             const payload = { rideId, lat, lng };
             if (ride.riderId) io.to(`user:${ride.riderId}`).emit("captain:location", payload);
             if (ride.riderSocketId) io.to(ride.riderSocketId).emit("captain:location", payload);
         } catch (err) { console.error("captain:location error:", err.message); }
+    });
+
+    // ── Captain signals arrival at pickup point ───────────────────────────
+    socket.on("captain:arrived", async ({ rideId }) => {
+        try {
+            const ride = await Ride.findById(rideId).catch(() => null);
+            if (!ride) return;
+            const captain = await Captain.findOne({ socketId: socket.id }).catch(() => null);
+            const captainName = captain?.name || "Your Captain";
+            const payload = { rideId, captainName, ts: Date.now() };
+            if (ride.riderId) io.to(`user:${ride.riderId}`).emit("captain:arrived", payload);
+            if (ride.riderSocketId) io.to(ride.riderSocketId).emit("captain:arrived", payload);
+            // Log arrival
+            pool.query(
+                "INSERT INTO captain_arrivals (ride_id, captain_id) VALUES ($1,$2)",
+                [rideId, captain?._id || null]
+            ).catch(() => {});
+            console.log(`📍 Captain ${captainName} arrived for ride ${rideId}`);
+        } catch (err) { console.error("captain:arrived error:", err.message); }
+    });
+
+    // ── Generate / return share token for a ride (rider requests) ────────────
+    socket.on("ride:share", async ({ rideId }) => {
+        try {
+            const existing = await pool.query("SELECT share_token FROM rides WHERE id = $1", [rideId]);
+            let token = existing.rows[0]?.share_token;
+            if (!token) {
+                token = require("crypto").randomBytes(12).toString("hex");
+                await pool.query("UPDATE rides SET share_token = $1 WHERE id = $2", [token, rideId]);
+            }
+            socket.emit("ride:share_token", { rideId, shareToken: token });
+        } catch (err) { console.error("ride:share error:", err.message); }
     });
 
     // ── Bid pricing: rider submits a bid ─────────────────────────
