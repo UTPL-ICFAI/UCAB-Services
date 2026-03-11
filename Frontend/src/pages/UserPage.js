@@ -1097,7 +1097,7 @@ const UserPage = () => {
 
           </div>
         </div>
-      }}
+      )}
       {rideStatus === "searching" && (
         <div className="trip-sheet searching-sheet">
           <div className="trip-sheet-inner">
