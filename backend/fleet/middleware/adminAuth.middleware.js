@@ -1,6 +1,6 @@
 /**
  * adminAuth.middleware.js
- *
+ * vb
  * Guards admin-only routes.
  * Expects the request header:  x-admin-secret: <ADMIN_SECRET>
  * Returns 401 if missing or wrong.
