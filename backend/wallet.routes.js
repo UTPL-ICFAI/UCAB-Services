@@ -4,7 +4,7 @@
  */
 const express = require("express");
 const jwt = require("jsonwebtoken");
-const pool = require("../config/db");
+const pool = require("./config/db");
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || "ucab_secret_2026";
