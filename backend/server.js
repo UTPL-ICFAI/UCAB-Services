@@ -18,6 +18,7 @@ const fleetRoutes = require("./fleet/fleet.routes");
 const walletRoutes = require("./wallet.routes");
 const supportRoutes = require("./support.routes");
 const adminRoutes = require("./admin.routes");
+const carpoolRoutes = require("./carpool.routes");
 
 const app = express();
 const server = http.createServer(app);
@@ -84,6 +85,7 @@ app.use("/api/fleet", fleetRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/support", supportRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/carpool", carpoolRoutes);
 app.get("/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
 
 // ── In-memory: last known captain location per rideId (for tracking) ────────
@@ -453,6 +455,40 @@ io.on("connection", (socket) => {
         }
     });
 
+    // ── Captain rates the rider after ride completes (two-way rating) ────
+    socket.on("rate rider", async ({ riderId, rideId, rating }) => {
+        try {
+            if (!riderId || !rating || rating < 1 || rating > 5) return;
+            // Update ride with captain's rating
+            if (rideId) {
+                await pool.query(
+                    "UPDATE rides SET captain_rating = $1 WHERE id = $2",
+                    [rating, rideId]
+                );
+            }
+            // Update rider's rolling average rating
+            const { rows } = await pool.query(
+                "SELECT rating, rating_count FROM users WHERE id = $1",
+                [riderId]
+            );
+            if (rows[0]) {
+                const prevRating = parseFloat(rows[0].rating) || 5.0;
+                const prevCount = parseInt(rows[0].rating_count) || 0;
+                const newCount = prevCount + 1;
+                const newRating = parseFloat(
+                    ((prevRating * prevCount + rating) / newCount).toFixed(2)
+                );
+                await pool.query(
+                    "UPDATE users SET rating = $1, rating_count = $2 WHERE id = $3",
+                    [newRating, newCount, riderId]
+                );
+                console.log(`⭐ Rider ${riderId} rated ${rating} → avg ${newRating}`);
+            }
+        } catch (err) {
+            console.error("rate rider error:", err.message);
+        }
+    });
+
     // ── Legacy OTP relay (backward compat) ───────────────────────
     socket.on("rider:share_otp", ({ captainSocketId, otp, rideId }) => {
         if (captainSocketId) io.to(captainSocketId).emit("captain:receive_otp", { otp, rideId });
@@ -477,9 +513,15 @@ io.on("connection", (socket) => {
                 }
             }
 
-            // Notify rider on all their devices
+            // Award loyalty points to rider: 1 point per ₹10 spent (min 1 point)
             const ride = await Ride.findById(rideId).catch(() => null);
             if (ride?.riderId) {
+                const points = Math.max(1, Math.floor((fare || 0) / 10));
+                pool.query(
+                    "UPDATE users SET loyalty_points = loyalty_points + $1 WHERE id = $2",
+                    [points, ride.riderId]
+                ).catch(() => {});
+                io.to(`user:${ride.riderId}`).emit("loyalty:points_earned", { points, rideId });
                 io.to(`user:${ride.riderId}`).emit("ride completed", { rideId });
             }
             io.emit("ride completed", { rideId });
@@ -514,7 +556,24 @@ io.on("connection", (socket) => {
             const payload = { rideId, lat, lng };
             if (ride.riderId) io.to(`user:${ride.riderId}`).emit("captain:location", payload);
             if (ride.riderSocketId) io.to(ride.riderSocketId).emit("captain:location", payload);
+            // Update captain's location in DB so nearby search works (throttled by client)
+            if (socket.captainId) {
+                pool.query(
+                    "UPDATE captains SET lat = $1, lng = $2 WHERE id = $3",
+                    [lat, lng, socket.captainId]
+                ).catch(() => {});
+            }
         } catch (err) { console.error("captain:location error:", err.message); }
+    });
+
+    // ── Captain broadcasts idle location (not on a ride, but online) ──
+    socket.on("captain:idle_location", ({ lat, lng }) => {
+        if (socket.captainId && lat && lng) {
+            pool.query(
+                "UPDATE captains SET lat = $1, lng = $2 WHERE id = $3",
+                [lat, lng, socket.captainId]
+            ).catch(() => {});
+        }
     });
 
     // ── Captain signals arrival at pickup point ───────────────────────────

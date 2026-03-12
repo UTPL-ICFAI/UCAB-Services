@@ -14,9 +14,11 @@ import FleetOwnerRegister from "./pages/fleet/FleetOwnerRegister";
 import FleetVehicleRegister from "./pages/fleet/FleetVehicleRegister";
 import FleetBookingPage from "./pages/fleet/FleetBookingPage";
 import RentalLoginPage from "./pages/RentalLoginPage";
+import RentalDashboard from "./pages/fleet/RentalDashboard";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import TrackingPage from "./pages/TrackingPage";
+import CarpoolPage from "./pages/CarpoolPage";
 
 import "./App.css";
 
@@ -37,6 +39,18 @@ const FleetPrivateRoute = ({ children }) => {
   return owner ? children : <Navigate to="/login/fleet" replace />;
 };
 
+/* ── Rental Provider guard ─────────────────────────────────── */
+const RentalPrivateRoute = ({ children }) => {
+  const provider = localStorage.getItem("rental_provider") || localStorage.getItem("fleet_owner");
+  if (!provider) return <Navigate to="/login/rental" replace />;
+  // If the stored key is a fleet owner (not rental), redirect them correctly
+  try {
+    const parsed = JSON.parse(provider);
+    if (parsed._portalType === "fleet") return <Navigate to="/login/rental" replace />;
+  } catch (_) {}
+  return children;
+};
+
 function App() {
   return (
     <BrowserRouter>
@@ -54,6 +68,10 @@ function App() {
         <Route path="/user" element={<PrivateRoute expectedRole="user">   <UserPage />    </PrivateRoute>} />
         <Route path="/captain" element={<PrivateRoute expectedRole="captain"><CaptainPage /> </PrivateRoute>} />
         <Route path="/fleet/dashboard" element={<FleetPrivateRoute><FleetOwnerDashboard /></FleetPrivateRoute>} />
+        <Route path="/rental/dashboard" element={<RentalPrivateRoute><RentalDashboard /></RentalPrivateRoute>} />
+
+        {/* Carpool */}
+        <Route path="/carpool" element={<PrivateRoute expectedRole="user"><CarpoolPage /></PrivateRoute>} />
 
         {/* Admin */}
         <Route path="/admin/login" element={<AdminLoginPage />} />

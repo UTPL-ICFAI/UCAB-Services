@@ -48,8 +48,10 @@ export default function RentalLoginPage() {
                 password: loginPw,
                 ownerType: "rental",
             });
-            localStorage.setItem("rental_provider", JSON.stringify(res.data.owner));
-            navigate("/fleet/dashboard"); // Reusing dashboard for now
+            // Store under both keys: rental_provider for display and fleet_owner for auth guard
+            localStorage.setItem("rental_provider", JSON.stringify({ ...res.data.owner, _portalType: "rental" }));
+            localStorage.setItem("fleet_owner", JSON.stringify({ ...res.data.owner, _portalType: "rental" }));
+            navigate("/rental/dashboard");
         } catch (err) {
             setError(err.response?.data?.message || "Login failed. Check email and password.");
         } finally { setLoading(false); }
@@ -75,8 +77,10 @@ export default function RentalLoginPage() {
                 driverLicense: docs.driverLicense,
                 ownerAadhaar: docs.ownerAadhaar,
             });
-            localStorage.setItem("rental_provider", JSON.stringify(res.data.owner));
-            navigate("/fleet/dashboard");
+            // Store under both keys: rental_provider for display and fleet_owner for auth guard
+            localStorage.setItem("rental_provider", JSON.stringify({ ...res.data.owner, _portalType: "rental" }));
+            localStorage.setItem("fleet_owner", JSON.stringify({ ...res.data.owner, _portalType: "rental" }));
+            navigate("/rental/dashboard");
         } catch (err) {
             setError(err.response?.data?.message || "Registration failed");
         } finally { setLoading(false); }

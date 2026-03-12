@@ -127,15 +127,38 @@ const Recenter = ({ center, zoom }) => {
   return null;
 };
 
+// ── Vehicle type → emoji for nearby captain markers ──────────
+const VEHICLE_ICON_MAP = {
+    go: "🚗", premier: "🚙", auto: "🛺", bike: "🏍️",
+};
+
+const makeVehicleIcon = (vehicleType, name) => {
+    const emoji = VEHICLE_ICON_MAP[vehicleType] || "🚗";
+    return L.divIcon({
+        className: "",
+        html: `<div style="display:flex;flex-direction:column;align-items:center;font-size:22px;
+                           filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))">
+            <span>${emoji}</span>
+            <span style="font-size:9px;font-weight:700;color:#222;background:#fff;
+                         border-radius:4px;padding:1px 4px;margin-top:-2px;max-width:60px;
+                         text-overflow:ellipsis;overflow:hidden;white-space:nowrap">${name}</span>
+        </div>`,
+        iconSize: [36, 44],
+        iconAnchor: [18, 22],
+        popupAnchor: [0, -24],
+    });
+};
+
 /**
  * MapView props:
- *  pickup   — { lat, lng, address }
- *  dropoff  — { lat, lng, address }
- *  captain  — { lat, lng }         (optional)
- *  onRouteFound — ({ distKm, durationMin }) callback
- *  height   — css string, default "100%"
+ *  pickup         — { lat, lng, address }
+ *  dropoff        — { lat, lng, address }
+ *  captain        — { lat, lng }         (live captain on an accepted ride)
+ *  nearbyCaptains — [{ id, name, vehicleType, rating, lat, lng }]  (idle map view)
+ *  onRouteFound   — ({ distKm, durationMin }) callback
+ *  height         — css string, default "100%"
  */
-const MapView = ({ pickup, dropoff, captain, onRouteFound, height = "100%" }) => {
+const MapView = ({ pickup, dropoff, captain, nearbyCaptains = [], onRouteFound, height = "100%" }) => {
   const defaultCenter = [20.5937, 78.9629]; // India center
   const mapCenter = pickup ? [pickup.lat, pickup.lng] : defaultCenter;
 
@@ -166,11 +189,27 @@ const MapView = ({ pickup, dropoff, captain, onRouteFound, height = "100%" }) =>
         </Marker>
       )}
 
+      {/* Live captain marker (during a ride) */}
       {captain && (
         <Marker position={[captain.lat, captain.lng]} icon={blueIcon}>
           <Popup>🚗 Your Captain is on the way!</Popup>
         </Marker>
       )}
+
+      {/* Nearby idle captains (before booking) */}
+      {nearbyCaptains.map((c) => (
+        <Marker
+          key={c.id}
+          position={[c.lat, c.lng]}
+          icon={makeVehicleIcon(c.vehicleType, c.name)}
+        >
+          <Popup>
+            <strong>{VEHICLE_ICON_MAP[c.vehicleType] || "🚗"} {c.name}</strong><br/>
+            ⭐ {parseFloat(c.rating || 5).toFixed(1)} · {c.vehicleType}
+            {c.vehicleModel ? ` · ${c.vehicleModel}` : ""}
+          </Popup>
+        </Marker>
+      ))}
 
       {pickup && dropoff && (
         <RoutingMachine
@@ -186,3 +225,4 @@ const MapView = ({ pickup, dropoff, captain, onRouteFound, height = "100%" }) =>
 };
 
 export default MapView;
+

@@ -1,12 +1,41 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const User = require("../models/User");
 const Captain = require("../models/Captain");
 const pool = require("../config/db");
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || "ucab_secret_2026";
+
+// ── Nodemailer transporter (open-source SMTP via .env) ──────
+// Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS in .env
+// Works with any SMTP: Gmail, Brevo, Mailgun, SendGrid, etc.
+let transporter = null;
+try {
+    const nodemailer = require("nodemailer");
+    transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || "smtp.gmail.com",
+        port: parseInt(process.env.SMTP_PORT || "587"),
+        secure: process.env.SMTP_SECURE === "true",
+        auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+        },
+    });
+} catch (_) {
+    console.warn("⚠️  nodemailer not installed — run: npm install nodemailer");
+}
+
+const OTP_EXPIRY_MIN = 10;
+
+function generateOtp() {
+    return String(Math.floor(100000 + Math.random() * 900000));
+}
+function hashOtp(otp) {
+    return crypto.createHash("sha256").update(otp).digest("hex");
+}
 
 // ── Helper: sign token ──────────────────────────────────────
 const signToken = (payload) =>
@@ -53,7 +82,101 @@ router.post("/user/login", async (req, res) => {
 });
 
 // ============================================================
+//  USER — Send email OTP for registration verification
+//  POST /api/auth/user/send-otp  { email }
+// ============================================================
+router.post("/user/send-otp", async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ message: "Valid email is required" });
+        }
+
+        // Check if email already registered
+        const existing = await User.findOne({ email: email.trim().toLowerCase() });
+        if (existing) return res.status(409).json({ message: "Email already registered" });
+
+        if (!transporter) {
+            return res.status(503).json({ message: "Email service not configured. Contact support." });
+        }
+
+        const otp = generateOtp();
+        const otpHash = hashOtp(otp);
+        const expiresAt = new Date(Date.now() + OTP_EXPIRY_MIN * 60 * 1000);
+
+        // Invalidate any existing OTPs for this email
+        await pool.query("DELETE FROM email_otps WHERE email = $1", [email.toLowerCase()]);
+        // Store new OTP
+        await pool.query(
+            "INSERT INTO email_otps (email, otp_hash, expires_at) VALUES ($1, $2, $3)",
+            [email.toLowerCase(), otpHash, expiresAt]
+        );
+
+        await transporter.sendMail({
+            from: `"uride Services" <${process.env.SMTP_USER}>`,
+            to: email,
+            subject: "Your uride verification code",
+            html: `
+                <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+                    <h2 style="color:#00c853">Verify your email</h2>
+                    <p>Use the code below to complete your uride registration.</p>
+                    <div style="font-size:36px;font-weight:800;letter-spacing:8px;color:#111;
+                                background:#f5f5f5;border-radius:8px;padding:16px 24px;
+                                text-align:center;margin:16px 0">
+                        ${otp}
+                    </div>
+                    <p style="color:#666;font-size:13px">This code expires in ${OTP_EXPIRY_MIN} minutes. 
+                    Do not share it with anyone.</p>
+                </div>
+            `,
+        });
+
+        console.log(`📧 OTP sent to ${email}`);
+        res.json({ message: "OTP sent to your email", expiresIn: OTP_EXPIRY_MIN * 60 });
+    } catch (err) {
+        console.error("send-otp error:", err.message);
+        res.status(500).json({ message: "Failed to send OTP: " + err.message });
+    }
+});
+
+// ============================================================
+//  USER — Verify email OTP (does NOT register — used as step)
+//  POST /api/auth/user/verify-otp  { email, otp }
+// ============================================================
+router.post("/user/verify-otp", async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        if (!email || !otp) return res.status(400).json({ message: "Email and OTP are required" });
+
+        const { rows } = await pool.query(
+            `SELECT * FROM email_otps 
+             WHERE email = $1 AND used = FALSE AND expires_at > NOW()
+             ORDER BY created_at DESC LIMIT 1`,
+            [email.toLowerCase()]
+        );
+
+        if (!rows[0]) {
+            return res.status(400).json({ message: "OTP expired or not found. Please request a new one." });
+        }
+
+        const inputHash = hashOtp(String(otp).trim());
+        if (inputHash !== rows[0].otp_hash) {
+            return res.status(400).json({ message: "Invalid OTP. Please check and try again." });
+        }
+
+        // Mark OTP as used
+        await pool.query("UPDATE email_otps SET used = TRUE WHERE id = $1", [rows[0].id]);
+
+        res.json({ verified: true, message: "Email verified successfully" });
+    } catch (err) {
+        console.error("verify-otp error:", err.message);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
+// ============================================================
 //  USER — Explicit full registration with email + password
+//  Requires email OTP to have been verified first (when email provided)
 // ============================================================
 router.post("/user/register", async (req, res) => {
     try {
@@ -357,6 +480,76 @@ router.put("/captain/photo", authMw, async (req, res) => {
         await pool.query("UPDATE captains SET photo_url = $1 WHERE id = $2", [photoUrl, req.user.id]);
         res.json({ photoUrl });
     } catch (err) { res.status(500).json({ message: "Server error" }); }
+});
+
+// ============================================================
+//  CAPTAINS — Nearby online captains (for map preview)
+//  GET /api/auth/captains/nearby?lat=&lng=&radius=5
+// ============================================================
+router.get("/captains/nearby", async (req, res) => {
+    try {
+        const { lat, lng, radius = 5 } = req.query;
+        if (!lat || !lng) return res.status(400).json({ message: "lat and lng required" });
+        const R = parseFloat(radius);
+        const userLat = parseFloat(lat);
+        const userLng = parseFloat(lng);
+
+        // Use Haversine inside SQL to filter within radius
+        const { rows } = await pool.query(
+            `SELECT id, name, vehicle_type, vehicle_model, vehicle_color, rating, lat, lng
+             FROM captains
+             WHERE is_online = TRUE
+               AND lat IS NOT NULL AND lng IS NOT NULL
+               AND (
+                 6371 * acos(
+                   LEAST(1, cos(radians($1)) * cos(radians(lat)) *
+                   cos(radians(lng) - radians($2)) +
+                   sin(radians($1)) * sin(radians(lat)))
+                 )
+               ) <= $3
+             LIMIT 25`,
+            [userLat, userLng, R]
+        );
+
+        const captains = rows.map((c) => ({
+            id: c.id,
+            name: c.name,
+            vehicleType: c.vehicle_type,
+            vehicleModel: c.vehicle_model,
+            vehicleColor: c.vehicle_color,
+            rating: c.rating ? parseFloat(c.rating) : 5.0,
+            lat: parseFloat(c.lat),
+            lng: parseFloat(c.lng),
+        }));
+
+        res.json({ captains });
+    } catch (err) {
+        console.error("captains/nearby error:", err.message);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
+// ============================================================
+//  USER — Loyalty Points
+//  GET /api/auth/user/loyalty?userId=<uuid>
+// ============================================================
+router.get("/user/loyalty", async (req, res) => {
+    try {
+        const { userId } = req.query;
+        if (!userId) return res.status(400).json({ message: "userId required" });
+        const { rows } = await pool.query(
+            "SELECT loyalty_points, rating, rating_count FROM users WHERE id = $1",
+            [userId]
+        );
+        if (!rows[0]) return res.status(404).json({ message: "User not found" });
+        res.json({
+            loyaltyPoints: rows[0].loyalty_points || 0,
+            rating: rows[0].rating ? parseFloat(rows[0].rating) : 5.0,
+            ratingCount: rows[0].rating_count || 0,
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Server error" });
+    }
 });
 
 module.exports = router;

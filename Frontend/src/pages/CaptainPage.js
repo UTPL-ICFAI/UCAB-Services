@@ -59,6 +59,12 @@ const CaptainPage = () => {
   const [photoSaveMsg, setPhotoSaveMsg] = useState("");
   const [arrivedSent, setArrivedSent] = useState(false);
 
+  /* ─── Rider rating modal ─────────────────────────────────── */
+  const [showRiderRating, setShowRiderRating] = useState(false);
+  const [completedRideData, setCompletedRideData] = useState(null);
+  const [riderRatingValue, setRiderRatingValue] = useState(0);
+  const [riderRatingHover, setRiderRatingHover] = useState(0);
+
   /* ─── Location broadcast (ETA for rider) ────────────────── */
   const locationIntervalRef = useRef(null);
 
@@ -332,18 +338,41 @@ const CaptainPage = () => {
       captainId: user._id,
       fare: acceptedRide.fare
     });
+    /* Save ride data for rating modal before clearing */
+    setCompletedRideData({
+      rideId: acceptedRide.rideId,
+      riderId: acceptedRide.riderId,
+      riderName: acceptedRide.riderName || acceptedRide.name || "Rider",
+    });
+    setRiderRatingValue(0);
+    setShowRiderRating(true);
     setAcceptedRide(null);
     setMapRide(null);
     setMsgInput("");
     setRideStartedConfirmed(false);
     setUserMessages([]);
-    showToast("🏁 Ride completed!");
+    showToast("🏁 Ride completed! Please rate the rider.");
   };
 
   const logout = () => {
     localStorage.removeItem("ucab_user");
     localStorage.removeItem("ucab_token");
     navigate("/");
+  };
+
+  const handleRateRider = (rating) => {
+    if (!completedRideData?.riderId || !completedRideData?.rideId) {
+      setShowRiderRating(false);
+      return;
+    }
+    socket.emit("rate rider", {
+      riderId: completedRideData.riderId,
+      rideId:  completedRideData.rideId,
+      rating,
+    });
+    setShowRiderRating(false);
+    setCompletedRideData(null);
+    showToast(`⭐ Rated rider ${rating}/5`);
   };
 
   const mapPickup = mapRide?.pickup || null;
@@ -369,6 +398,63 @@ const CaptainPage = () => {
 
   return (
     <div className="uber-layout">
+
+      {/* ── Rider Rating Modal ── */}
+      {showRiderRating && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+          zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{
+            background: "#1a1a2e", borderRadius: 20, padding: "28px 24px",
+            maxWidth: 340, width: "90%", textAlign: "center",
+            border: "1px solid rgba(255,255,255,0.12)",
+          }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>⭐</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Rate your rider</div>
+            <div style={{ fontSize: 13, color: "#aaa", marginBottom: 20 }}>
+              {completedRideData?.riderName || "Rider"}
+            </div>
+            <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 24 }}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <span
+                  key={star}
+                  onClick={() => setRiderRatingValue(star)}
+                  onMouseEnter={() => setRiderRatingHover(star)}
+                  onMouseLeave={() => setRiderRatingHover(0)}
+                  style={{
+                    fontSize: 36, cursor: "pointer",
+                    color: star <= (riderRatingHover || riderRatingValue) ? "#f1c40f" : "#444",
+                    transition: "color 0.15s",
+                  }}>
+                  ★
+                </span>
+              ))}
+            </div>
+            <button
+              disabled={!riderRatingValue}
+              onClick={() => handleRateRider(riderRatingValue)}
+              style={{
+                width: "100%", background: riderRatingValue ? "linear-gradient(90deg,#1db954,#17a44a)" : "#333",
+                border: "none", borderRadius: 20, padding: "12px 0",
+                color: riderRatingValue ? "#000" : "#666",
+                fontWeight: 800, fontSize: 15, cursor: riderRatingValue ? "pointer" : "not-allowed",
+                marginBottom: 10,
+              }}>
+              Submit Rating
+            </button>
+            <button
+              onClick={() => { setShowRiderRating(false); setCompletedRideData(null); }}
+              style={{
+                width: "100%", background: "none", border: "1px solid #444",
+                borderRadius: 20, padding: "10px 0", color: "#888",
+                fontWeight: 600, fontSize: 14, cursor: "pointer",
+              }}>
+              Skip
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Full-screen map ── */}
       <div className="map-fullscreen">

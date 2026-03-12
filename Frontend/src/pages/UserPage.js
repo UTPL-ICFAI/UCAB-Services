@@ -99,7 +99,11 @@ const UserPage = () => {
   }, [socket]);
 
   /* ─── Service tab ─────────────────────────────────────────── */
-  const [serviceTab, setServiceTab] = useState("ride"); // ride | courier | rental
+  const [serviceTab, setServiceTab] = useState("ride"); // ride | courier | rental | carpool
+
+  /* ─── Nearby captains + loyalty ───────────────────────────── */
+  const [nearbyCaptains, setNearbyCaptains] = useState([]);
+  const [loyaltyPoints, setLoyaltyPoints] = useState(0);
 
   /* ─── Core ride state ─────────────────────────────────────── */
   const [pickup, setPickup] = useState(null);
@@ -342,6 +346,32 @@ const UserPage = () => {
     });
     return () => socket.off("notification:new");
   }, [socket]);
+
+  /* ─── Loyalty points fetch ────────────────────────────────── */
+  useEffect(() => {
+    if (!user?._id) return;
+    axios.get(`${BACKEND_URL}/api/auth/user/loyalty?userId=${user._id}`)
+      .then((r) => setLoyaltyPoints(r.data.loyaltyPoints || 0))
+      .catch(() => {});
+  }, []);  // eslint-disable-line
+
+  /* ─── Loyalty points awarded socket ──────────────────────── */
+  useEffect(() => {
+    socket.on("loyalty:points_earned", ({ points, total }) => {
+      setLoyaltyPoints(total);
+      showToast(`🎁 You earned ${points} loyalty point${points !== 1 ? "s" : ""}! Total: ${total}`);
+    });
+    return () => socket.off("loyalty:points_earned");
+  }, [socket]);  // eslint-disable-line
+
+  /* ─── Nearby captains fetch ───────────────────────────────── */
+  useEffect(() => {
+    const loc = pickup || null;
+    if (!loc?.lat || !loc?.lng) return;
+    axios.get(`${BACKEND_URL}/api/auth/captains/nearby?lat=${loc.lat}&lng=${loc.lng}&radius=5`)
+      .then((r) => setNearbyCaptains(r.data || []))
+      .catch(() => {});
+  }, [pickup]);
 
   useEffect(() => {
     // Server confirms ride was created and gives us the rideId
@@ -834,6 +864,7 @@ const UserPage = () => {
           pickup={serviceTab === "courier" ? cFrom : pickup}
           dropoff={serviceTab === "courier" ? cTo : dropoff}
           captain={captainPos}
+          nearbyCaptains={rideStatus === "idle" ? nearbyCaptains : []}
           onRouteFound={serviceTab === "courier" ? setCRouteInfo : setRouteInfo}
           height="100%" />
       </div>
@@ -876,6 +907,9 @@ const UserPage = () => {
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 18, fontWeight: 800, color: "#1db954" }}>₹{walletBalance.toFixed(0)}</div>
                 <div style={{ fontSize: 10, color: "#666" }}>Wallet</div>
+                {loyaltyPoints > 0 && (
+                  <div style={{ fontSize: 11, color: "#f39c12", marginTop: 2 }}>🎁 {loyaltyPoints} pts</div>
+                )}
               </div>
             </div>
 
@@ -1485,13 +1519,17 @@ const UserPage = () => {
           {/* Service tab bar */}
           <div className="service-tabs">
             {[
-              { id: "ride", icon: "🚗", label: "Rides" },
+              { id: "ride",    icon: "🚗", label: "Rides" },
               { id: "courier", icon: "📦", label: "Courier" },
-              { id: "rental", icon: "🔑", label: "Rentals" },
+              { id: "rental",  icon: "🔑", label: "Rentals" },
+              { id: "carpool", icon: "🤝", label: "Carpool" },
             ].map((t) => (
               <button key={t.id}
                 className={`svc-tab ${serviceTab === t.id ? "active" : ""}`}
-                onClick={() => setServiceTab(t.id)}>
+                onClick={() => {
+                  if (t.id === "carpool") { navigate("/carpool"); return; }
+                  setServiceTab(t.id);
+                }}>
                 <span>{t.icon}</span>
                 <span>{t.label}</span>
               </button>
