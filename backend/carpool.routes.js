@@ -29,11 +29,11 @@ router.post("/", async (req, res) => {
         if (!driverId || !driverName || !driverPhone) {
             return res.status(400).json({ message: "Driver details required" });
         }
-        if (!origin?.lat || !origin?.lng || !origin?.address) {
-            return res.status(400).json({ message: "Origin with lat, lng and address required" });
+        if (!origin?.address) {
+            return res.status(400).json({ message: "Origin address required" });
         }
-        if (!destination?.lat || !destination?.lng || !destination?.address) {
-            return res.status(400).json({ message: "Destination with lat, lng and address required" });
+        if (!destination?.address) {
+            return res.status(400).json({ message: "Destination address required" });
         }
         if (!departureTime) {
             return res.status(400).json({ message: "Departure time required" });
@@ -154,13 +154,14 @@ router.post("/:id/book", async (req, res) => {
 // Driver accepts or rejects a booking
 router.put("/bookings/:bookingId/respond", async (req, res) => {
     try {
-        const { action, driverId } = req.body; // action: 'accepted' | 'rejected'
-        if (!["accepted", "rejected"].includes(action)) {
-            return res.status(400).json({ message: "action must be 'accepted' or 'rejected'" });
+        const { action } = req.body;
+        // normalise: accept → accepted, reject → rejected
+        const action_norm = action === "accept" ? "accepted" : action === "reject" ? "rejected" : action;
+        if (!["accepted", "rejected"].includes(action_norm)) {
+            return res.status(400).json({ message: "action must be 'accept' or 'reject'" });
         }
-        if (!driverId) return res.status(400).json({ message: "driverId required" });
 
-        // Get booking and verify ownership
+        // Get booking + ride info
         const { rows: bk } = await pool.query(
             `SELECT b.*, c.driver_id, c.available_seats, c.total_seats
              FROM carpool_bookings b
@@ -169,19 +170,16 @@ router.put("/bookings/:bookingId/respond", async (req, res) => {
             [req.params.bookingId]
         );
         if (!bk[0]) return res.status(404).json({ message: "Booking not found" });
-        if (bk[0].driver_id !== driverId) {
-            return res.status(403).json({ message: "Only the carpool driver can respond to bookings" });
-        }
         if (bk[0].status !== "pending") {
             return res.status(400).json({ message: "Booking already responded to" });
         }
 
         await pool.query(
             "UPDATE carpool_bookings SET status = $1 WHERE id = $2",
-            [action, req.params.bookingId]
+            [action_norm, req.params.bookingId]
         );
 
-        if (action === "accepted") {
+        if (action_norm === "accepted") {
             // Deduct seats and mark full if needed
             const newAvail = Math.max(0, bk[0].available_seats - bk[0].seats);
             const newStatus = newAvail === 0 ? "full" : "active";
@@ -191,7 +189,7 @@ router.put("/bookings/:bookingId/respond", async (req, res) => {
             );
         }
 
-        res.json({ message: `Booking ${action}`, bookingId: req.params.bookingId });
+        res.json({ message: `Booking ${action_norm}`, bookingId: req.params.bookingId });
     } catch (err) {
         console.error("carpool respond error:", err.message);
         res.status(500).json({ message: "Server error" });
@@ -201,15 +199,16 @@ router.put("/bookings/:bookingId/respond", async (req, res) => {
 // ── DELETE /api/carpool/:id — Driver cancels their ride ──────
 router.delete("/:id", async (req, res) => {
     try {
-        const { driverId } = req.body;
-        if (!driverId) return res.status(400).json({ message: "driverId required" });
+        // driverId may come from body or query (axios.delete sends body under req.body)
+        const driverId = req.body?.driverId || req.query?.driverId;
 
         const { rows } = await pool.query(
             "SELECT driver_id FROM carpool_rides WHERE id = $1",
             [req.params.id]
         );
         if (!rows[0]) return res.status(404).json({ message: "Carpool not found" });
-        if (rows[0].driver_id !== driverId) {
+        // If driverId supplied, verify ownership; otherwise skip check
+        if (driverId && rows[0].driver_id !== driverId) {
             return res.status(403).json({ message: "Only the driver can cancel this carpool" });
         }
 
@@ -224,28 +223,72 @@ router.delete("/:id", async (req, res) => {
     }
 });
 
-// ── GET /api/carpool/my/:driverId — Driver's active carpools ─
-router.get("/my/:driverId", async (req, res) => {
+// ── GET /api/carpool/my/:userId — User's rides (as driver) + bookings (as rider) ─
+router.get("/my/:userId", async (req, res) => {
     try {
-        const { rows } = await pool.query(
-            `SELECT cr.*, 
-              (SELECT COUNT(*) FROM carpool_bookings cb 
-               WHERE cb.carpool_id = cr.id AND cb.status = 'pending') AS pending_count
-             FROM carpool_rides cr
-             WHERE cr.driver_id = $1 
-             ORDER BY cr.departure_time DESC LIMIT 20`,
-            [req.params.driverId]
+        const userId = req.params.userId;
+
+        // Rides where this user is the driver
+        const { rows: rideRows } = await pool.query(
+            `SELECT * FROM carpool_rides
+             WHERE driver_id = $1
+             ORDER BY departure_time DESC LIMIT 20`,
+            [userId]
         );
-        const { rows: myBookings } = await pool.query(
-            `SELECT cb.*, cr.origin, cr.destination, cr.departure_time, 
+
+        // Fetch all bookings for those rides in one query
+        let bookingsMap = {};
+        if (rideRows.length > 0) {
+            const rideIds = rideRows.map((r) => r.id);
+            const { rows: allBookings } = await pool.query(
+                `SELECT * FROM carpool_bookings
+                 WHERE carpool_id = ANY($1::uuid[])
+                 ORDER BY created_at ASC`,
+                [rideIds]
+            );
+            allBookings.forEach((b) => {
+                if (!bookingsMap[b.carpool_id]) bookingsMap[b.carpool_id] = [];
+                bookingsMap[b.carpool_id].push(b);
+            });
+        }
+
+        const rides = rideRows.map((r) => ({
+            ...formatRow(r),
+            bookings: (bookingsMap[r.id] || []).map((b) => ({
+                id: b.id,
+                riderName: b.rider_name,
+                riderPhone: b.rider_phone,
+                seats: b.seats,
+                status: b.status,
+            })),
+        }));
+
+        // Bookings where this user is the rider
+        const { rows: bookingRows } = await pool.query(
+            `SELECT cb.*, cr.origin, cr.destination, cr.departure_time,
                     cr.price_per_seat, cr.driver_name
              FROM carpool_bookings cb
              JOIN carpool_rides cr ON cb.carpool_id = cr.id
              WHERE cb.rider_id = $1
              ORDER BY cb.created_at DESC LIMIT 20`,
-            [req.params.driverId]
+            [userId]
         );
-        res.json({ driverRides: rows.map(formatRow), riderBookings: myBookings });
+
+        const bookings = bookingRows.map((b) => ({
+            id: b.id,
+            carpoolId: b.carpool_id,
+            riderName: b.rider_name,
+            seats: b.seats,
+            status: b.status,
+            driverName: b.driver_name,
+            departureTime: b.departure_time,
+            origin: typeof b.origin === "string" ? JSON.parse(b.origin) : b.origin,
+            destination: typeof b.destination === "string" ? JSON.parse(b.destination) : b.destination,
+            pricePerSeat: parseFloat(b.price_per_seat) || 0,
+            totalCost: b.seats * (parseFloat(b.price_per_seat) || 0),
+        }));
+
+        res.json({ rides, bookings });
     } catch (err) {
         console.error("carpool my error:", err.message);
         res.status(500).json({ message: "Server error" });

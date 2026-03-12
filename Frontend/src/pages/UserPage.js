@@ -369,7 +369,7 @@ const UserPage = () => {
     const loc = pickup || null;
     if (!loc?.lat || !loc?.lng) return;
     axios.get(`${BACKEND_URL}/api/auth/captains/nearby?lat=${loc.lat}&lng=${loc.lng}&radius=5`)
-      .then((r) => setNearbyCaptains(r.data || []))
+      .then((r) => setNearbyCaptains(r.data?.captains || []))
       .catch(() => {});
   }, [pickup]);
 

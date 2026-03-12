@@ -52,7 +52,7 @@ export default function CarpoolPage() {
   const fetchRides = useCallback(() => {
     setLoading(true);
     axios.get(`${BACKEND_URL}/api/carpool`, AUTH)
-      .then((r) => setRides(r.data || []))
+      .then((r) => setRides(Array.isArray(r.data) ? r.data : (r.data?.carpools || r.data?.rides || [])))
       .catch(() => setRides([]))
       .finally(() => setLoading(false));
   }, []);
@@ -132,11 +132,16 @@ export default function CarpoolPage() {
   const handleRespond = async (bookingId, action) => {
     setRespondMsg("");
     try {
-      await axios.put(`${BACKEND_URL}/api/carpool/bookings/${bookingId}/respond`, { action }, AUTH);
+      // send 'accept' or 'reject' — backend normalises to accepted/rejected
+      await axios.put(
+        `${BACKEND_URL}/api/carpool/bookings/${bookingId}/respond`,
+        { action, driverId: user._id },
+        AUTH
+      );
       setRespondMsg(`✅ Booking ${action === "accept" ? "accepted" : "rejected"}.`);
       fetchMy();
     } catch (e) {
-      setRespondMsg(e.response?.data?.error || "Action failed.");
+      setRespondMsg(e.response?.data?.message || e.response?.data?.error || "Action failed.");
     }
   };
 
@@ -144,10 +149,13 @@ export default function CarpoolPage() {
   const handleCancelRide = async (rideId) => {
     if (!window.confirm("Cancel this carpool ride? All pending bookings will be rejected.")) return;
     try {
-      await axios.delete(`${BACKEND_URL}/api/carpool/${rideId}`, AUTH);
+      await axios.delete(`${BACKEND_URL}/api/carpool/${rideId}`, {
+        data: { driverId: user._id },
+        ...AUTH,
+      });
       fetchMy();
     } catch (e) {
-      alert(e.response?.data?.error || "Cancel failed.");
+      alert(e.response?.data?.message || e.response?.data?.error || "Cancel failed.");
     }
   };
 
@@ -390,7 +398,7 @@ export default function CarpoolPage() {
                     Driver: {b.driverName} &nbsp;·&nbsp; 🕐 {fmtDate(b.departureTime)}
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, alignItems: "center" }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#1db954" }}>₹{b.totalCost}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#1db954" }}>₹{b.totalCost ?? (b.seats * b.pricePerSeat)}</span>
                     <span style={{
                       fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20,
                       background: b.status === "accepted" ? "rgba(29,185,84,0.2)" :
