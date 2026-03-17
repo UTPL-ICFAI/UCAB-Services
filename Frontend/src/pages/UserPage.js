@@ -36,13 +36,13 @@ const CANCEL_FREE_MINS = 2;
 const CANCEL_FEE = 50;
 
 const SUPPORT_CATEGORIES = [
-  { id: "driver_behavior",    label: "Driver behavior" },
-  { id: "overcharged",        label: "Overcharged / wrong fare" },
-  { id: "safety",             label: "Safety concern" },
-  { id: "wrong_route",        label: "Wrong route taken" },
+  { id: "driver_behavior", label: "Driver behavior" },
+  { id: "overcharged", label: "Overcharged / wrong fare" },
+  { id: "safety", label: "Safety concern" },
+  { id: "wrong_route", label: "Wrong route taken" },
   { id: "ride_not_completed", label: "Ride not completed" },
-  { id: "app_issue",          label: "App / technical issue" },
-  { id: "other",              label: "Other" },
+  { id: "app_issue", label: "App / technical issue" },
+  { id: "other", label: "Other" },
 ];
 
 const RATING_TAGS = [
@@ -280,11 +280,11 @@ const UserPage = () => {
   useEffect(() => {
     if (!tkn) return;
     axios.get(`${BACKEND_URL}/api/auth/user/saved-places`, { headers: { Authorization: `Bearer ${tkn}` } })
-      .then((r) => setSavedPlaces(r.data.savedPlaces || [])).catch(() => {});
+      .then((r) => setSavedPlaces(r.data.savedPlaces || [])).catch(() => { });
     axios.get(`${BACKEND_URL}/api/auth/user/emergency-contacts`, { headers: { Authorization: `Bearer ${tkn}` } })
-      .then((r) => setEmergencyContacts(r.data.contacts || [])).catch(() => {});
+      .then((r) => setEmergencyContacts(r.data.contacts || [])).catch(() => { });
     axios.get(`${BACKEND_URL}/api/rides/surge`)
-      .then((r) => setSurgeMultiplier(r.data.multiplier || 1)).catch(() => {});
+      .then((r) => setSurgeMultiplier(r.data.multiplier || 1)).catch(() => { });
   }, [tkn]);  // eslint-disable-line
 
   /* ─── P0: Socket listeners for captain:arrived + share token ── */
@@ -302,13 +302,13 @@ const UserPage = () => {
         gain.gain.setValueAtTime(0.3, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
         osc.start(); osc.stop(ctx.currentTime + 0.8);
-      } catch (_) {}
+      } catch (_) { }
       setTimeout(() => setCaptainArrivedBanner(false), 8000);
     });
     socket.on("ride:share_token", ({ shareToken: t }) => {
       setShareToken(t);
       const link = `${window.location.origin}/track/${t}`;
-      navigator.clipboard?.writeText(link).catch(() => {});
+      navigator.clipboard?.writeText(link).catch(() => { });
       showToast("🔗 Tracking link copied! Share it with friends or family.");
     });
     return () => {
@@ -322,7 +322,7 @@ const UserPage = () => {
     if (!tkn) return;
     axios.get(`${BACKEND_URL}/api/wallet/balance`, { headers: { Authorization: `Bearer ${tkn}` } })
       .then((r) => { setWalletBalance(r.data.balance || 0); setWalletTxns(r.data.transactions || []); })
-      .catch(() => {});
+      .catch(() => { });
   }, [tkn]);
 
   useEffect(() => {
@@ -352,7 +352,7 @@ const UserPage = () => {
     if (!user?._id) return;
     axios.get(`${BACKEND_URL}/api/auth/user/loyalty?userId=${user._id}`)
       .then((r) => setLoyaltyPoints(r.data.loyaltyPoints || 0))
-      .catch(() => {});
+      .catch(() => { });
   }, []);  // eslint-disable-line
 
   /* ─── Loyalty points awarded socket ──────────────────────── */
@@ -370,7 +370,7 @@ const UserPage = () => {
     if (!loc?.lat || !loc?.lng) return;
     axios.get(`${BACKEND_URL}/api/auth/captains/nearby?lat=${loc.lat}&lng=${loc.lng}&radius=5`)
       .then((r) => setNearbyCaptains(r.data?.captains || []))
-      .catch(() => {});
+      .catch(() => { });
   }, [pickup]);
 
   useEffect(() => {
@@ -576,7 +576,7 @@ const UserPage = () => {
       showToast("✅ Report submitted to uride support");
       // refresh ticket list
       axios.get(`${BACKEND_URL}/api/support/tickets`, { headers: { Authorization: `Bearer ${tkn}` } })
-        .then((r) => setSupportTickets(r.data.tickets || [])).catch(() => {});
+        .then((r) => setSupportTickets(r.data.tickets || [])).catch(() => { });
     } catch (err) {
       setSupportMsg(`❌ ${err.response?.data?.error || "Submission failed"}`);
     }
@@ -652,7 +652,7 @@ const UserPage = () => {
     if (!currentRideId.current) { showToast("⚠️ No active ride to share"); return; }
     if (shareToken) {
       const link = `${window.location.origin}/track/${shareToken}`;
-      navigator.clipboard?.writeText(link).catch(() => {});
+      navigator.clipboard?.writeText(link).catch(() => { });
       showToast("🔗 Tracking link copied again!");
       return;
     }
@@ -952,30 +952,30 @@ const UserPage = () => {
                 <p>🔄 No charge if captain cancels or none found.</p>
               </div>
               <div className="drawer-section-title">About Maps</div>
-            <div className="cancel-policy-box" style={{ fontSize: 12, lineHeight: 1.7 }}>
-              <p>🗺 <strong>OpenStreetMap</strong> — open-source tiles, no personal data.</p>
-              <p>📍 <strong>Nominatim</strong> — only typed query sent, no tracking.</p>
-              <p>🛣 <strong>OSRM</strong> — lat/lng sent for route only, MIT licensed.</p>
-            </div>
-            <button className="btn-primary" style={{ marginTop: 20, background: "#e74c3c" }}
-              onClick={logout}>🚪 Logout</button>
+              <div className="cancel-policy-box" style={{ fontSize: 12, lineHeight: 1.7 }}>
+                <p>🗺 <strong>OpenStreetMap</strong> — open-source tiles, no personal data.</p>
+                <p>📍 <strong>Nominatim</strong> — only typed query sent, no tracking.</p>
+                <p>🛣 <strong>OSRM</strong> — lat/lng sent for route only, MIT licensed.</p>
+              </div>
+              <button className="btn-primary" style={{ marginTop: 20, background: "#e74c3c" }}
+                onClick={logout}>🚪 Logout</button>
 
-            {/* ── Quick links ── */}
-            <div style={{ marginTop: 16, borderTop: "1px solid #333", paddingTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ fontSize: 12, color: "#888", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>More Services</div>
-              <button onClick={() => { setShowAccount(false); navigate("/notifications"); }}
-                style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, padding: "10px 14px", color: "#eee", cursor: "pointer", textAlign: "left", fontSize: 14 }}>
-                🔔 My Notifications
-              </button>
-              <button onClick={() => { setShowAccount(false); navigate("/fleet/book"); }}
-                style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, padding: "10px 14px", color: "#eee", cursor: "pointer", textAlign: "left", fontSize: 14 }}>
-                🗓️ Book Fleet Vehicles
-              </button>
-              <button onClick={() => openSupportModal(null, "app_issue")}
-                style={{ background: "#1a0000", border: "1px solid #e53935", borderRadius: 10, padding: "10px 14px", color: "#e53935", cursor: "pointer", textAlign: "left", fontSize: 14, fontWeight: 700 }}>
-                🆘 Help &amp; Support
-              </button>
-            </div>
+              {/* ── Quick links ── */}
+              <div style={{ marginTop: 16, borderTop: "1px solid #333", paddingTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ fontSize: 12, color: "#888", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>More Services</div>
+                <button onClick={() => { setShowAccount(false); navigate("/notifications"); }}
+                  style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, padding: "10px 14px", color: "#eee", cursor: "pointer", textAlign: "left", fontSize: 14 }}>
+                  🔔 My Notifications
+                </button>
+                <button onClick={() => { setShowAccount(false); navigate("/fleet/book"); }}
+                  style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, padding: "10px 14px", color: "#eee", cursor: "pointer", textAlign: "left", fontSize: 14 }}>
+                  🗓️ Book Fleet Vehicles
+                </button>
+                <button onClick={() => openSupportModal(null, "app_issue")}
+                  style={{ background: "#1a0000", border: "1px solid #e53935", borderRadius: 10, padding: "10px 14px", color: "#e53935", cursor: "pointer", textAlign: "left", fontSize: 14, fontWeight: 700 }}>
+                  🆘 Help &amp; Support
+                </button>
+              </div>
             </>)}
 
             {/* ── Wallet tab ── */}
@@ -1519,9 +1519,9 @@ const UserPage = () => {
           {/* Service tab bar */}
           <div className="service-tabs">
             {[
-              { id: "ride",    icon: "🚗", label: "Rides" },
+              { id: "ride", icon: "🚗", label: "Rides" },
               { id: "courier", icon: "📦", label: "Courier" },
-              { id: "rental",  icon: "🔑", label: "Rentals" },
+              { id: "rental", icon: "🔑", label: "Rentals" },
               { id: "carpool", icon: "🤝", label: "Carpool" },
             ].map((t) => (
               <button key={t.id}

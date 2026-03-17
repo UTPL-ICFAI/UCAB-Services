@@ -21,7 +21,7 @@ const BOOKING_TYPES = Object.freeze({
 /**
  * Server-side rate configuration.
  * These are NEVER accepted from the client — only used internally.
- * To make configurable: move to process.env or a DB settings doc.
+ * To make configurable: move to process.env or a DB settings document.
  */
 const DEFAULT_RATES = Object.freeze({
     DRIVER_ONLY_HOURLY: 150,  // ₹ per hour

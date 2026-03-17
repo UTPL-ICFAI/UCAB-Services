@@ -133,7 +133,7 @@ export default function RentalLoginPage() {
                     </form>
                 )}
 
-                {/* ── Register form ── */}
+                {/* Register form */}
                 {tab === "register" && (
                     <form onSubmit={handleRegister} style={formStyle}>
                         <div style={row}>
