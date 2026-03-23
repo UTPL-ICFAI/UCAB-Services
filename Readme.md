@@ -5,10 +5,32 @@ UCab Services is a lightweight ride-hailing demo built with a React frontend and
 This repository is a working prototype intended for learning and local LAN testing — not for production use without reviewing security, scaling, and privacy considerations.
 
 **Contents**
-- `Frontend/` — React app (map UI, booking flows, courier, rentals, captain dashboard)
+- `Frontend/` — React app (map UI, booking flows, courier, rentals, captain dashboard) with modern UI/UX
 - `backend/` — Express API, Socket.io server, Mongoose models
+- `DESIGN_SYSTEM.md` — Complete design system documentation and component library
 
 **Live demo (local)**: runs frontend on `:3000` and backend on `:5000` by default.
+
+---
+
+**✨ v2.0 New Features - Modern UI/UX Redesign**
+
+The application now features a complete visual redesign with professional ride-sharing aesthetic:
+
+- **UIKit Component Library**: Reusable components (Button, Card, Input, Badge, Alert, Modal, Toast, Spinner)
+- **Centralized Design System**: THEME object with colors, typography, spacing, shadows, and presets
+- **Modern Pages**: All pages redesigned with glassmorphism, gradients, smooth animations
+- **Professional Styling**: Black primary + green secondary (#00d084) accent colors
+- **Responsive Design**: Full mobile support (320px - 1920px breakpoints)
+- **Animation System**: 11+ keyframe animations for smooth interactions
+- **Performance Utils**: Caching, debouncing, throttling utilities
+- **Fixed Issues**: 
+  - ✅ Geolocation with detailed error handling and permission checks
+  - ✅ Captain offline-on-refresh with socket persistence
+  - ✅ Enhanced notification delivery logging
+  - ✅ Improved performance with API caching infrastructure
+
+**See [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) for complete design documentation.**
 
 ---
 
@@ -20,13 +42,16 @@ This repository is a working prototype intended for learning and local LAN testi
 - Real maps: OpenStreetMap tiles, Nominatim for geocoding, OSRM for routing/directions
 - Realtime: Socket.io vehicle-type rooms and single-accept locking for rides
 - Auth: JWT for captains and riders; tokens stored in `localStorage`
+- **Modern UI**: Professional design with smooth animations and responsive layouts
 
 ---
 
 **Tech Stack**
-- Frontend: React 19, react-router-dom, react-leaflet, Leaflet, axios, socket.io-client
+- Frontend: React 19, react-router-dom, react-leaflet, Leaflet, axios, socket.io-client, Inter fonts
 - Backend: Node.js (Express 5), Socket.io, PostgreSQL (raw pg), bcryptjs, jsonwebtoken
 - Maps/Routing: OpenStreetMap (tiles), Nominatim (search), OSRM (routing)
+- Design: CSS custom properties, flexbox, CSS animations, responsive grid
+- Build: Webpack (via react-scripts), optimized bundle (~290 kB gzipped)
 
 ---
 
