@@ -33,6 +33,31 @@ router.post("/login", async (req, res) => {
             return res.status(400).json({ error: "Username and password required" });
         }
 
+        // Allow demo credentials: test/test
+        if (username === "test" && password === "test") {
+            const token = jwt.sign(
+                {
+                    id: "demo_support_team",
+                    username: "test",
+                    role: "supervisor",
+                    isSupportTeam: true,
+                },
+                JWT_SECRET,
+                { expiresIn: "24h" }
+            );
+
+            return res.json({
+                token,
+                team: {
+                    id: "demo_support_team",
+                    username: "test",
+                    name: "Demo Support Team",
+                    role: "supervisor",
+                },
+            });
+        }
+
+        // Try database lookup for production users
         const { rows } = await pool.query(
             "SELECT * FROM support_team WHERE username = $1 AND status = 'active'",
             [username]
@@ -44,11 +69,8 @@ router.post("/login", async (req, res) => {
 
         const team = rows[0];
         
-        // For demo: if username/password is "test"/"test", allow it
         let isValid = false;
-        if (username === "test" && password === "test") {
-            isValid = true;
-        } else if (team.password_hash) {
+        if (team.password_hash) {
             isValid = await bcrypt.compare(password, team.password_hash);
         }
 
@@ -279,6 +301,42 @@ router.post("/init-default", async (req, res) => {
         res.json({ message: "✅ Default support team user created (username: test, password: test)" });
     } catch (err) {
         console.error("POST /api/support-team/init-default error:", err.message);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
+// ── GET /api/support-team/demo-credentials — Get demo credentials ──
+router.get("/demo-credentials", async (req, res) => {
+    try {
+        res.json({
+            demoSupportTeam: {
+                username: "test",
+                password: "test",
+                role: "supervisor",
+                name: "Demo Support Team",
+                email: "support@demo.ucab.com",
+            },
+            features: {
+                tickets: "View and manage customer support tickets from riders and captains",
+                liveTraffic: "Monitor real-time ride statistics and traffic patterns",
+                stats: "View database statistics including user counts, vehicle counts, etc.",
+            },
+            instructions: {
+                access: "Go to home page → Select 'I'm in Support Team' → Login with demo credentials",
+                loginPath: "/login/support",
+                dashboardPath: "/support/dashboard",
+                features: [
+                    "View all support tickets with filtering",
+                    "Update ticket status (open → in_review → resolved → closed)",
+                    "Add admin notes to tickets",
+                    "Monitor live ride traffic (24-hour window)",
+                    "View comprehensive database statistics",
+                    "Pagination support for ticket management"
+                ]
+            }
+        });
+    } catch (err) {
+        console.error("GET /api/support-team/demo-credentials error:", err.message);
         res.status(500).json({ error: "Server error" });
     }
 });

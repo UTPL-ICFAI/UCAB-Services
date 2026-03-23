@@ -244,4 +244,69 @@ router.get("/bookings", auth, async (req, res) => {
     }
 });
 
+// ── GET /api/rental/demo-credentials — Get demo rental owner credentials ──
+router.get("/demo-credentials", async (req, res) => {
+    try {
+        res.json({
+            demoRentalOwner: {
+                email: "rentalowner@demo.com",
+                password: "demo123",
+                name: "Demo Rental Provider",
+                phone: "+91-98765-43210",
+                company: "Demo Rentals",
+                totalVehicles: 5,
+                vehicles: [
+                    {
+                        name: "Hatchback",
+                        model: "Hyundai i20",
+                        perHr: 150,
+                        icon: "🚗",
+                        features: ["AC", "Power Steering", "Airbags"]
+                    },
+                    {
+                        name: "Sedan",
+                        model: "Maruti Swift",
+                        perHr: 200,
+                        icon: "🚙",
+                        features: ["AC", "Bluetooth", "Touchscreen"]
+                    },
+                    {
+                        name: "SUV",
+                        model: "Mahindra XUV",
+                        perHr: 300,
+                        icon: "🚕",
+                        features: ["4WD", "Sunroof", "Cruise Control"]
+                    },
+                    {
+                        name: "Bike",
+                        model: "Honda CB Shine",
+                        perHr: 80,
+                        icon: "🏍️",
+                        features: ["Fuel Efficient", "LED Lights"]
+                    },
+                    {
+                        name: "Scooter",
+                        model: "Vespa",
+                        perHr: 60,
+                        icon: "🛵",
+                        features: ["Easy to Ride", "Fuel Efficient"]
+                    }
+                ],
+                location: "Bangalore, India",
+                joinedDate: "2024-01-01"
+            },
+            instructions: {
+                step1: "Use the credentials above to login as a rental owner via /login/rental",
+                step2: "Once logged in, you can view pending rental booking requests",
+                step3: "Accept bookings and set your pickup location",
+                step4: "Riders will then set their exit/return point",
+                step5: "Complete bookings after vehicle handover"
+            }
+        });
+    } catch (err) {
+        console.error("GET /api/rental/demo-credentials error:", err.message);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
 module.exports = router;
