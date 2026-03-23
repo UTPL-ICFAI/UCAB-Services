@@ -19,6 +19,8 @@ const walletRoutes = require("./wallet.routes");
 const supportRoutes = require("./support.routes");
 const adminRoutes = require("./admin.routes");
 const carpoolRoutes = require("./carpool.routes");
+const rentalRoutes = require("./rental.routes");
+const supportTeamRoutes = require("./support-team.routes");
 
 const app = express();
 const server = http.createServer(app);
@@ -86,6 +88,8 @@ app.use("/api/wallet", walletRoutes);
 app.use("/api/support", supportRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/carpool", carpoolRoutes);
+app.use("/api/rental", rentalRoutes);
+app.use("/api/support-team", supportTeamRoutes);
 app.get("/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
 
 // ── In-memory: last known captain location per rideId (for tracking) ────────

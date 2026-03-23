@@ -47,6 +47,17 @@ const ROLES = [
         features: ["Manage rental fleet", "Communicate with users", "Set meeting locations"],
         route: "/login/rental",
     },
+    {
+        id: "support",
+        icon: "💬",
+        title: "I'm in Support Team",
+        subtitle: "Help manage & monitor rides",
+        gradient: "linear-gradient(135deg, #1a1a0d 0%, #2a2a0d 100%)",
+        accent: THEME.colors.warning,
+        glowColor: "rgba(255, 193, 7, 0.25)",
+        features: ["View support tickets", "Monitor live traffic", "Database insights"],
+        route: "/login/support",
+    },
 ];
 
 export default function LandingPage() {

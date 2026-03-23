@@ -19,6 +19,8 @@ import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import TrackingPage from "./pages/TrackingPage";
 import CarpoolPage from "./pages/CarpoolPage";
+import SupportTeamLoginPage from "./pages/SupportTeamLoginPage";
+import SupportTeamDashboard from "./pages/SupportTeamDashboard";
 
 import "./App.css";
 
@@ -51,6 +53,12 @@ const RentalPrivateRoute = ({ children }) => {
   return children;
 };
 
+/* ── Support Team guard ────────────────────────────────────── */
+const SupportPrivateRoute = ({ children }) => {
+  const token = localStorage.getItem("support_team_token");
+  return token ? children : <Navigate to="/login/support" replace />;
+};
+
 function App() {
   return (
     <BrowserRouter>
@@ -63,12 +71,14 @@ function App() {
         <Route path="/login/captain" element={<CaptainLoginPage />} />
         <Route path="/login/fleet" element={<FleetOwnerLoginPage />} />
         <Route path="/login/rental" element={<RentalLoginPage />} />
+        <Route path="/login/support" element={<SupportTeamLoginPage />} />
 
         {/* Protected dashboards */}
         <Route path="/user" element={<PrivateRoute expectedRole="user">   <UserPage />    </PrivateRoute>} />
         <Route path="/captain" element={<PrivateRoute expectedRole="captain"><CaptainPage /> </PrivateRoute>} />
         <Route path="/fleet/dashboard" element={<FleetPrivateRoute><FleetOwnerDashboard /></FleetPrivateRoute>} />
         <Route path="/rental/dashboard" element={<RentalPrivateRoute><RentalDashboard /></RentalPrivateRoute>} />
+        <Route path="/support/dashboard" element={<SupportPrivateRoute><SupportTeamDashboard /></SupportPrivateRoute>} />
 
         {/* Carpool */}
         <Route path="/carpool" element={<PrivateRoute expectedRole="user"><CarpoolPage /></PrivateRoute>} />

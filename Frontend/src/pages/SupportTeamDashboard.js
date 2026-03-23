@@ -1,0 +1,728 @@
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import BACKEND_URL from "../config";
+import { THEME } from "../theme";
+
+export default function SupportTeamDashboard() {
+    const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState("tickets");
+    const [stats, setStats] = useState(null);
+    const [tickets, setTickets] = useState([]);
+    const [traffic, setTraffic] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [selectedTicket, setSelectedTicket] = useState(null);
+    const [newStatus, setNewStatus] = useState("");
+    const [adminNote, setAdminNote] = useState("");
+
+    const token = localStorage.getItem("support_team_token");
+    const team = JSON.parse(localStorage.getItem("support_team") || "{}");
+
+    useEffect(() => {
+        if (!token) navigate("/login/support");
+        else loadDashboard();
+    }, [token, navigate]);
+
+    const loadDashboard = async () => {
+        setLoading(true);
+        try {
+            const [statsRes, ticketsRes, trafficRes] = await Promise.all([
+                axios.get(`${BACKEND_URL}/api/support-team/stats`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                }),
+                axios.get(`${BACKEND_URL}/api/support-team/tickets?page=1&limit=20`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                }),
+                axios.get(`${BACKEND_URL}/api/support-team/live-rides`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                }),
+            ]);
+
+            setStats(statsRes.data.stats);
+            setTickets(ticketsRes.data.tickets);
+            setTraffic(trafficRes.data.traffic);
+        } catch (err) {
+            console.error("Failed to load dashboard:", err);
+            if (err.response?.status === 401) navigate("/login/support");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleTicketUpdate = async (ticketId) => {
+        if (!newStatus) {
+            alert("Please select a status");
+            return;
+        }
+
+        try {
+            const res = await axios.put(
+                `${BACKEND_URL}/api/support-team/ticket/${ticketId}/status`,
+                { status: newStatus, adminNote: adminNote.trim() || null },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            setSelectedTicket(null);
+            setNewStatus("");
+            setAdminNote("");
+            loadDashboard();
+            alert("✅ Ticket updated");
+        } catch (err) {
+            alert("Failed to update ticket");
+        }
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem("support_team_token");
+        localStorage.removeItem("support_team");
+        navigate("/");
+    };
+
+    return (
+        <div style={styles.page}>
+            {/* Header */}
+            <div style={styles.header}>
+                <div style={styles.headerContent}>
+                    <h1 style={styles.title}>💬 Support Team Dashboard</h1>
+                    <div style={styles.userInfo}>
+                        <span>👤 {team.name || "Support"}</span>
+                        <button onClick={handleLogout} style={styles.logoutBtn}>
+                            Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Tabs */}
+            <div style={styles.tabsContainer}>
+                {["tickets", "traffic", "stats"].map((tab) => (
+                    <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        style={{
+                            ...styles.tab,
+                            borderBottomColor:
+                                activeTab === tab
+                                    ? THEME.colors.secondary
+                                    : "transparent",
+                            color:
+                                activeTab === tab
+                                    ? THEME.colors.secondary
+                                    : "rgba(255, 255, 255, 0.6)",
+                        }}
+                    >
+                        {tab === "tickets" && "🎟️ Tickets"}
+                        {tab === "traffic" && "📊 Live Traffic"}
+                        {tab === "stats" && "📈 Database Stats"}
+                    </button>
+                ))}
+            </div>
+
+            {/* Content */}
+            <div style={styles.container}>
+                {/* Tickets Tab */}
+                {activeTab === "tickets" && (
+                    <div style={styles.section}>
+                        <h2 style={styles.sectionTitle}>Support Tickets</h2>
+                        {loading ? (
+                            <div style={styles.loader}>Loading...</div>
+                        ) : (
+                            <div style={styles.ticketsList}>
+                                {tickets.length === 0 ? (
+                                    <div style={styles.empty}>No tickets found</div>
+                                ) : (
+                                    tickets.map((ticket) => (
+                                        <div
+                                            key={ticket.id}
+                                            style={styles.ticketCard}
+                                            onClick={() => setSelectedTicket(ticket)}
+                                        >
+                                            <div style={styles.ticketHeader}>
+                                                <h3 style={styles.ticketSubject}>
+                                                    {ticket.subject}
+                                                </h3>
+                                                <span
+                                                    style={{
+                                                        ...styles.statusBadge,
+                                                        background:
+                                                            ticket.status === "open"
+                                                                ? "#ff6b6b"
+                                                                : ticket.status ===
+                                                                  "in_review"
+                                                                ? "#ffc107"
+                                                                : "#4caf50",
+                                                    }}
+                                                >
+                                                    {ticket.status.toUpperCase()}
+                                                </span>
+                                            </div>
+                                            <p style={styles.ticketUser}>
+                                                👤 {ticket.user_name || "Unknown"}
+                                            </p>
+                                            <p style={styles.ticketCategory}>
+                                                📌 {ticket.category}
+                                            </p>
+                                            <p style={styles.ticketTime}>
+                                                🕐{" "}
+                                                {new Date(
+                                                    ticket.created_at
+                                                ).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Ticket Details Modal */}
+                {selectedTicket && (
+                    <div style={styles.modal}>
+                        <div style={styles.modalContent}>
+                            <button
+                                onClick={() => setSelectedTicket(null)}
+                                style={styles.closeBtn}
+                            >
+                                ✕
+                            </button>
+
+                            <h2 style={styles.modalTitle}>Ticket Details</h2>
+
+                            <div style={styles.detailsGrid}>
+                                <div>
+                                    <label style={styles.detailLabel}>Subject</label>
+                                    <p style={styles.detailValue}>
+                                        {selectedTicket.subject}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label style={styles.detailLabel}>User</label>
+                                    <p style={styles.detailValue}>
+                                        {selectedTicket.user_name} (
+                                        {selectedTicket.user_phone})
+                                    </p>
+                                </div>
+                                <div>
+                                    <label style={styles.detailLabel}>Category</label>
+                                    <p style={styles.detailValue}>
+                                        {selectedTicket.category}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label style={styles.detailLabel}>Status</label>
+                                    <p style={styles.detailValue}>
+                                        {selectedTicket.status}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label style={styles.detailLabel}>Description</label>
+                                <p style={styles.detailValue}>
+                                    {selectedTicket.description || "No description"}
+                                </p>
+                            </div>
+
+                            <hr
+                                style={{
+                                    border: "none",
+                                    borderTop: "1px solid rgba(255, 255, 255, 0.1)",
+                                    margin: "20px 0",
+                                }}
+                            />
+
+                            <div>
+                                <label style={styles.detailLabel}>Update Status</label>
+                                <select
+                                    value={newStatus}
+                                    onChange={(e) => setNewStatus(e.target.value)}
+                                    style={styles.select}
+                                >
+                                    <option value="">Select status...</option>
+                                    <option value="open">Open</option>
+                                    <option value="in_review">In Review</option>
+                                    <option value="resolved">Resolved</option>
+                                    <option value="closed">Closed</option>
+                                </select>
+                            </div>
+
+                            <div style={{ marginTop: "16px" }}>
+                                <label style={styles.detailLabel}>Admin Note</label>
+                                <textarea
+                                    value={adminNote}
+                                    onChange={(e) => setAdminNote(e.target.value)}
+                                    placeholder="Add a note..."
+                                    style={styles.textarea}
+                                />
+                            </div>
+
+                            <div style={styles.modalActions}>
+                                <button
+                                    onClick={() => setSelectedTicket(null)}
+                                    style={styles.cancelBtn}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() =>
+                                        handleTicketUpdate(selectedTicket.id)
+                                    }
+                                    style={styles.submitBtn}
+                                >
+                                    Update Ticket
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Traffic Tab */}
+                {activeTab === "traffic" && (
+                    <div style={styles.section}>
+                        <h2 style={styles.sectionTitle}>Live Ride Traffic</h2>
+                        {loading ? (
+                            <div style={styles.loader}>Loading...</div>
+                        ) : traffic ? (
+                            <div style={styles.statsGrid}>
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>📊</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>Total Rides (24h)</div>
+                                        <div style={styles.statValue}>
+                                            {traffic.total_rides || 0}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>🚗</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>Ongoing Rides</div>
+                                        <div style={styles.statValue}>
+                                            {traffic.ongoing_rides || 0}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>🔍</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>Searching</div>
+                                        <div style={styles.statValue}>
+                                            {traffic.searching_rides || 0}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>🚴</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>Carpool Rides</div>
+                                        <div style={styles.statValue}>
+                                            {traffic.carpool_rides || 0}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>📦</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>Courier Rides</div>
+                                        <div style={styles.statValue}>
+                                            {traffic.courier_rides || 0}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>💰</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>
+                                            Avg Fare (Ongoing)
+                                        </div>
+                                        <div style={styles.statValue}>
+                                            ₹
+                                            {traffic.avg_fare_ongoing
+                                                ? Math.round(
+                                                    traffic.avg_fare_ongoing
+                                                )
+                                                : 0}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={styles.empty}>No traffic data</div>
+                        )}
+                    </div>
+                )}
+
+                {/* Stats Tab */}
+                {activeTab === "stats" && (
+                    <div style={styles.section}>
+                        <h2 style={styles.sectionTitle}>Database Statistics</h2>
+                        {loading ? (
+                            <div style={styles.loader}>Loading...</div>
+                        ) : stats ? (
+                            <div style={styles.statsGrid}>
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>👥</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>Total Users</div>
+                                        <div style={styles.statValue}>
+                                            {stats.totalUsers}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>🚕</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>Total Captains</div>
+                                        <div style={styles.statValue}>
+                                            {stats.totalCaptains}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>🚗</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>Registered Vehicles</div>
+                                        <div style={styles.statValue}>
+                                            {stats.totalVehicles}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>📅</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>Rides (30 days)</div>
+                                        <div style={styles.statValue}>
+                                            {stats.ridesLast30Days}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>🔔</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>Open Tickets</div>
+                                        <div style={styles.statValue}>
+                                            {stats.openTickets}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>🏢</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>Fleet Owners</div>
+                                        <div style={styles.statValue}>
+                                            {stats.fleetOwners}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={styles.statCard}>
+                                    <div style={styles.statIcon}>🔑</div>
+                                    <div style={styles.statContent}>
+                                        <div style={styles.statLabel}>
+                                            Rental Providers
+                                        </div>
+                                        <div style={styles.statValue}>
+                                            {stats.rentalProviders}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={styles.empty}>No stats available</div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            <style>{`
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+                * { box-sizing: border-box; margin: 0; padding: 0; }
+                body { font-family: 'Inter', sans-serif; }
+                @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+                @keyframes slideInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+            `}</style>
+        </div>
+    );
+}
+
+const styles = {
+    page: {
+        minHeight: "100vh",
+        background: "linear-gradient(135deg, #080c10 0%, #0f1419 100%)",
+        color: "#fff",
+        fontFamily: "'Inter', sans-serif",
+    },
+    header: {
+        background: "rgba(15, 20, 25, 0.7)",
+        borderBottom: "1px solid rgba(0, 208, 132, 0.2)",
+        padding: "20px 30px",
+        backdropFilter: "blur(10px)",
+    },
+    headerContent: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        maxWidth: "1400px",
+        margin: "0 auto",
+    },
+    title: {
+        fontSize: "24px",
+        fontWeight: "700",
+    },
+    userInfo: {
+        display: "flex",
+        alignItems: "center",
+        gap: "20px",
+        fontSize: "14px",
+    },
+    logoutBtn: {
+        background: "rgba(244, 67, 54, 0.2)",
+        border: "1px solid rgba(244, 67, 54, 0.3)",
+        color: "#ff6b6b",
+        padding: "8px 16px",
+        borderRadius: "6px",
+        cursor: "pointer",
+        fontSize: "13px",
+        fontWeight: "500",
+        transition: "all 0.3s ease",
+    },
+    tabsContainer: {
+        display: "flex",
+        gap: "30px",
+        padding: "20px 30px",
+        maxWidth: "1400px",
+        margin: "0 auto",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+    },
+    tab: {
+        background: "none",
+        border: "none",
+        color: "rgba(255, 255, 255, 0.6)",
+        fontSize: "14px",
+        fontWeight: "600",
+        cursor: "pointer",
+        paddingBottom: "12px",
+        borderBottom: "2px solid transparent",
+        transition: "all 0.3s ease",
+    },
+    container: {
+        maxWidth: "1400px",
+        margin: "0 auto",
+        padding: "40px 30px",
+    },
+    section: {
+        animation: "slideUp 0.6s ease-out",
+    },
+    sectionTitle: {
+        fontSize: "20px",
+        fontWeight: "700",
+        marginBottom: "20px",
+    },
+    loader: {
+        textAlign: "center",
+        padding: "40px",
+        color: "rgba(255, 255, 255, 0.6)",
+    },
+    empty: {
+        textAlign: "center",
+        padding: "60px 20px",
+        color: "rgba(255, 255, 255, 0.4)",
+        fontSize: "14px",
+    },
+    ticketsList: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+        gap: "16px",
+    },
+    ticketCard: {
+        background: "rgba(255, 255, 255, 0.05)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        borderRadius: "12px",
+        padding: "16px",
+        cursor: "pointer",
+        transition: "all 0.3s ease",
+    },
+    ticketHeader: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "start",
+        gap: "12px",
+        marginBottom: "12px",
+    },
+    ticketSubject: {
+        fontSize: "14px",
+        fontWeight: "600",
+        flex: 1,
+    },
+    statusBadge: {
+        fontSize: "10px",
+        fontWeight: "700",
+        padding: "4px 8px",
+        borderRadius: "4px",
+        color: "#fff",
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+    },
+    ticketUser: {
+        fontSize: "12px",
+        color: "rgba(255, 255, 255, 0.7)",
+        marginBottom: "6px",
+    },
+    ticketCategory: {
+        fontSize: "12px",
+        color: "rgba(255, 255, 255, 0.6)",
+        marginBottom: "6px",
+    },
+    ticketTime: {
+        fontSize: "11px",
+        color: "rgba(255, 255, 255, 0.5)",
+    },
+    modal: {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: "rgba(0, 0, 0, 0.7)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+        animation: "slideInUp 0.3s ease",
+    },
+    modalContent: {
+        background: "rgba(15, 20, 25, 0.95)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        borderRadius: "16px",
+        padding: "30px",
+        maxWidth: "600px",
+        width: "90%",
+        maxHeight: "80vh",
+        overflowY: "auto",
+        backdropFilter: "blur(10px)",
+        position: "relative",
+    },
+    closeBtn: {
+        position: "absolute",
+        top: "15px",
+        right: "15px",
+        background: "none",
+        border: "none",
+        color: "rgba(255, 255, 255, 0.6)",
+        fontSize: "20px",
+        cursor: "pointer",
+    },
+    modalTitle: {
+        fontSize: "20px",
+        fontWeight: "700",
+        marginBottom: "20px",
+    },
+    detailsGrid: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: "16px",
+        marginBottom: "20px",
+    },
+    detailLabel: {
+        fontSize: "12px",
+        fontWeight: "600",
+        color: "rgba(255, 255, 255, 0.6)",
+        textTransform: "uppercase",
+        marginBottom: "6px",
+        display: "block",
+    },
+    detailValue: {
+        fontSize: "14px",
+        color: "rgba(255, 255, 255, 0.9)",
+    },
+    select: {
+        width: "100%",
+        background: "rgba(255, 255, 255, 0.05)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        color: "#fff",
+        padding: "10px 12px",
+        borderRadius: "6px",
+        fontSize: "13px",
+    },
+    textarea: {
+        width: "100%",
+        background: "rgba(255, 255, 255, 0.05)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        color: "#fff",
+        padding: "10px 12px",
+        borderRadius: "6px",
+        fontSize: "13px",
+        minHeight: "80px",
+        resize: "vertical",
+        fontFamily: "'Inter', sans-serif",
+    },
+    modalActions: {
+        display: "flex",
+        gap: "12px",
+        marginTop: "24px",
+    },
+    cancelBtn: {
+        flex: 1,
+        background: "rgba(255, 255, 255, 0.05)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        color: "#fff",
+        padding: "10px",
+        borderRadius: "6px",
+        cursor: "pointer",
+        fontSize: "13px",
+        fontWeight: "600",
+    },
+    submitBtn: {
+        flex: 1,
+        background: "linear-gradient(135deg, #00d084 0%, #00a860 100%)",
+        border: "none",
+        color: "#fff",
+        padding: "10px",
+        borderRadius: "6px",
+        cursor: "pointer",
+        fontSize: "13px",
+        fontWeight: "600",
+    },
+    statsGrid: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+        gap: "16px",
+    },
+    statCard: {
+        background: "rgba(255, 255, 255, 0.05)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        borderRadius: "12px",
+        padding: "20px",
+        display: "flex",
+        alignItems: "center",
+        gap: "16px",
+        transition: "all 0.3s ease",
+    },
+    statIcon: {
+        fontSize: "32px",
+    },
+    statContent: {
+        flex: 1,
+    },
+    statLabel: {
+        fontSize: "12px",
+        color: "rgba(255, 255, 255, 0.6)",
+        fontWeight: "500",
+        marginBottom: "4px",
+    },
+    statValue: {
+        fontSize: "24px",
+        fontWeight: "700",
+        color: "rgba(0, 208, 132, 0.9)",
+    },
+};

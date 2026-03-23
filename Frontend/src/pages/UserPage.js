@@ -211,7 +211,14 @@ const UserPage = () => {
   const [rHours, setRHours] = useState(4);
   const [rWithDriver, setRWithDriver] = useState(false);
   const [rLocation, setRLocation] = useState(null);
-  const [rentalStatus, setRentalStatus] = useState("idle"); // idle | confirmed
+  const [rentalStatus, setRentalStatus] = useState("idle"); // idle | pending | accepted | confirmed
+  const [rentalBookingId, setRentalBookingId] = useState(null);
+  const [rentalOwnerId, setRentalOwnerId] = useState(null);
+  const [rentalOwnerName, setRentalOwnerName] = useState("");
+  const [rentalOwnerPhone, setRentalOwnerPhone] = useState("");
+  const [ownerPickupLocation, setOwnerPickupLocation] = useState(null);
+  const [dropoffLocation, setDropoffLocation] = useState(null);
+  const [showExitPointModal, setShowExitPointModal] = useState(false);
 
   /* ─── Draggable bottom sheet ──────────────────────────────── */
   const sheetRef = useRef(null);
@@ -856,7 +863,15 @@ const UserPage = () => {
 
   const confirmRental = async () => {
     if (!rLocation) { showToast("⚠️ Set your pickup location"); return; }
+    
     try {
+      setRentalStatus("pending");
+      
+      // For now, simulate owner acceptance with a booking
+      // In production, this would create a rental_bookings record and wait for owner approval
+      const vehicleId = "vehicle_" + rVehicle; // Would be real vehicle ID from backend
+      const ownerId = "owner_default"; // Would be real owner ID from backend
+      
       const res = await axios.post(`${BACKEND_URL}/api/fleet/bookings/v2`, {
         bookingType: "VEHICLE_ONLY",
         clientName: user.name || "Rider",
@@ -865,22 +880,24 @@ const UserPage = () => {
         clientType: "individual",
         vehicleType: rentalVehicle.name,
         pickupLocation: rLocation.address,
-        dropLocation: rLocation.address, // Same for rental pickup
+        dropLocation: rLocation.address,
         date: new Date().toISOString(),
-        durationDays: Math.ceil(rHours / 24) || 1, // API expects days for VEHICLE_ONLY
+        durationDays: Math.ceil(rHours / 24) || 1,
       });
 
-      setRentalStatus("confirmed");
-      showToast(`🚗 ${rentalVehicle.name} rental confirmed! Provider will contact you.`);
-
-      // Notify parent/rental provider via socket if possible
-      socket.emit("notify:rental_booked", {
-        bookingId: res.data.booking._id,
-        userId: user._id,
-        location: rLocation,
-      });
+      // Simulate owner data (in production, this comes from database)
+      setRentalBookingId(res.data.booking._id);
+      setRentalOwnerId(ownerId);
+      setRentalOwnerName("Rental Provider");
+      setRentalOwnerPhone("+91-XXXX-XXXX");
+      
+      // Show rental acceptance popup
+      setRentalStatus("pending_acceptance");
+      
+      showToast(`⏳ Booking request sent to ${rentalVehicle.name} provider...`);
 
     } catch (err) {
+      setRentalStatus("idle");
       const serverMsg = err.response?.data?.message || "";
       if (serverMsg.toLowerCase().includes("no available") || serverMsg.toLowerCase().includes("no vehicle")) {
         showToast("🚗 No vehicle found — no rental vehicles of this type are registered with us yet. Please try a different type or check back later.");
@@ -1951,23 +1968,39 @@ const UserPage = () => {
                       {rentalVehicle.name} · {rHours} hrs · {rWithDriver ? "With driver" : "Self-drive"}
                     </p>
                     <div className="tfare-amount" style={{ marginTop: 12 }}>₹{rentalFare}</div>
-                    <p style={{ color: "#666", fontSize: 12, marginTop: 6 }}>
-                      📍 Pickup: {rLocation?.address || "Your location"}
-                    </p>
+                    
+                    <div style={{ background: "rgba(255, 255, 255, 0.05)", borderRadius: 12, padding: "16px", marginTop: 16, marginBottom: 16, textAlign: "left", fontSize: 12 }}>
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ color: "#888", marginBottom: 4 }}>📍 Pickup Location (Your location):</div>
+                        <div style={{ color: "#1db954", fontWeight: 600 }}>{rLocation?.address || "Your location"}</div>
+                      </div>
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ color: "#888", marginBottom: 4 }}>🏪 Provider will meet you at:</div>
+                        <div style={{ color: "#00a8ff", fontWeight: 600 }}>{rLocation?.address}</div>
+                      </div>
+                      <div>
+                        <div style={{ color: "#888", marginBottom: 4 }}>🏁 Return Location (Your choice):</div>
+                        <div style={{ color: "#ff9800", fontWeight: 600 }}>{dropoffLocation?.address || "Not set"}</div>
+                      </div>
+                    </div>
 
                     <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
                       <button className="btn-primary" style={{ flex: 1, background: "#1db954" }}
                         onClick={() => showToast("💬 Starting chat with provider...")}>
-                        💬 Communicate
+                        💬 Contact Provider
                       </button>
                       <button className="btn-primary" style={{ flex: 1, background: "#2b6cb0" }}
-                        onClick={() => showToast("📍 Meeting point shared via app!")}>
-                        📍 Meeting Point
+                        onClick={() => showToast("📍 Sharing meeting point with provider...")}>
+                        📍 Share Location
                       </button>
                     </div>
 
                     <button className="cancel-btn" style={{ marginTop: 16 }}
-                      onClick={() => { setRentalStatus("idle"); setRLocation(null); }}>
+                      onClick={() => { 
+                        setRentalStatus("idle"); 
+                        setRLocation(null); 
+                        setDropoffLocation(null);
+                      }}>
                       New Rental
                     </button>
                   </div>
@@ -2165,6 +2198,178 @@ const UserPage = () => {
               }}>
               {cancelReason ? "Confirm Cancel" : "Select a reason to continue"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Rental Booking Acceptance Popup ── */}
+      {rentalStatus === "pending_acceptance" && (
+        <div className="support-modal-overlay" onClick={() => {}}>
+          <div className="support-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "500px" }}>
+            <div style={{ textAlign: "center", padding: "30px 20px" }}>
+              <div style={{ fontSize: 50, marginBottom: 16 }}>🚗</div>
+              <h2 style={{ color: "#1db954", margin: "12px 0 8px", fontSize: 20 }}>Rental Request Received!</h2>
+              <p style={{ color: "#888", fontSize: 13, marginBottom: 20 }}>
+                {rentalVehicle.name} for {rHours} hrs · {rWithDriver ? "With driver" : "Self-drive"}
+              </p>
+
+              <div style={{ background: "rgba(255, 255, 255, 0.05)", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+                <div style={{ fontSize: 12, color: "#888", textAlign: "left" }}>
+                  <div style={{ marginBottom: 10 }}>📍 Your pickup location:</div>
+                  <div style={{ color: "#eee", marginBottom: 16 }}>{rLocation?.address || "Your location"}</div>
+                  
+                  <div style={{ marginBottom: 10 }}>👤 Provider:</div>
+                  <div style={{ color: "#eee", marginBottom: 8 }}>{rentalOwnerName}</div>
+                  <div style={{ color: "#888", fontSize: 11 }}>📞 {rentalOwnerPhone}</div>
+                </div>
+              </div>
+
+              <div style={{ background: "rgba(0, 208, 132, 0.1)", borderRadius: 12, padding: "12px", marginBottom: 20 }}>
+                <div style={{ fontSize: 24, fontWeight: 700, color: "#00d084" }}>₹{rentalFare}</div>
+                <div style={{ fontSize: 11, color: "#888" }}>Total rental cost</div>
+              </div>
+
+              <div style={{ background: "rgba(255, 193, 7, 0.1)", border: "1px solid rgba(255, 193, 7, 0.3)", borderRadius: 12, padding: "12px", marginBottom: 20, fontSize: 12, color: "rgba(255, 193, 7, 0.9)" }}>
+                ⏳ Waiting for provider to confirm... Once accepted, you can set your exit point!
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  onClick={() => {
+                    setRentalStatus("idle");
+                    setRLocation(null);
+                    showToast("❌ Rental booking cancelled");
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    borderRadius: 8,
+                    border: "1px solid #e53935",
+                    background: "rgba(229, 57, 53, 0.1)",
+                    color: "#e53935",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontSize: 13,
+                  }}
+                >
+                  Cancel Request
+                </button>
+
+                <button
+                  onClick={() => {
+                    // Simulate owner acceptance
+                    setRentalStatus("accepted");
+                    showToast("✅ Provider accepted! Set your exit point now");
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "linear-gradient(135deg, #1db954 0%, #1aa34a 100%)",
+                    color: "#fff",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontSize: 13,
+                  }}
+                >
+                  Simulate Accept
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Rental Exit Point Modal ── */}
+      {rentalStatus === "accepted" && (
+        <div className="support-modal-overlay" onClick={() => {}}>
+          <div className="support-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "500px" }}>
+            <div style={{ padding: "20px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>📍 Set Exit Point</h2>
+                <button
+                  onClick={() => setRentalStatus("idle")}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#888",
+                    fontSize: 20,
+                    cursor: "pointer",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p style={{ color: "#888", fontSize: 13, marginBottom: 16 }}>
+                Where will you return the {rentalVehicle.name}?
+              </p>
+
+              <div style={{ marginBottom: 16 }}>
+                <LocationSearch
+                  placeholder="📍 Return location"
+                  dotColor="red"
+                  onSelect={setDropoffLocation}
+                  value={dropoffLocation?.address || ""}
+                />
+              </div>
+
+              {dropoffLocation && (
+                <div style={{ background: "rgba(255, 255, 255, 0.05)", borderRadius: 12, padding: "12px", marginBottom: 16 }}>
+                  <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>Selected Return Location:</div>
+                  <div style={{ fontSize: 14, color: "#1db954", fontWeight: 600 }}>{dropoffLocation.address}</div>
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  onClick={() => {
+                    setRentalStatus("idle");
+                    setDropoffLocation(null);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    background: "rgba(255, 255, 255, 0.05)",
+                    color: "#fff",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontSize: 13,
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (!dropoffLocation) {
+                      showToast("⚠️ Please select a return location");
+                      return;
+                    }
+                    setRentalStatus("confirmed");
+                    showToast("✅ Rental confirmed! Provider will bring vehicle to pickup location");
+                  }}
+                  disabled={!dropoffLocation}
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: dropoffLocation ? "linear-gradient(135deg, #1db954 0%, #1aa34a 100%)" : "#2a2a2a",
+                    color: "#fff",
+                    fontWeight: 600,
+                    cursor: dropoffLocation ? "pointer" : "not-allowed",
+                    fontSize: 13,
+                    opacity: dropoffLocation ? 1 : 0.5,
+                  }}
+                >
+                  Confirm Rental
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
