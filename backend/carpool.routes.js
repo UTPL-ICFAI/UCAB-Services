@@ -119,10 +119,28 @@ router.post("/:id/book", async (req, res) => {
 
         // Check carpool and available seats
         const { rows: cr } = await pool.query(
-            "SELECT * FROM carpool_rides WHERE id = $1 AND status = 'active'",
+            "SELECT * FROM carpool_rides WHERE id = $1",
             [req.params.id]
         );
-        if (!cr[0]) return res.status(404).json({ message: "Carpool not found or no longer active" });
+        if (!cr[0]) return res.status(404).json({ message: "Carpool not found" });
+        
+        // Check if ride is active
+        if (cr[0].status !== 'active') {
+            return res.status(400).json({ message: "Carpool is no longer accepting bookings (not active)" });
+        }
+        
+        // Check if ride has started
+        if (cr[0].started) {
+            return res.status(400).json({ message: "This carpool has already started, cannot book now" });
+        }
+        
+        // Check if departure time has passed
+        const now = new Date();
+        const departureTime = new Date(cr[0].departure_time);
+        if (departureTime <= now) {
+            return res.status(400).json({ message: "Cannot book a ride with departure time in the past" });
+        }
+        
         if (requestedSeats > cr[0].available_seats) {
             return res.status(400).json({ message: `Only ${cr[0].available_seats} seat(s) available` });
         }
@@ -223,6 +241,39 @@ router.delete("/:id", async (req, res) => {
     }
 });
 
+// ── PUT /api/carpool/:id/start — Driver marks ride as started ──
+router.put("/:id/start", async (req, res) => {
+    try {
+        const { driverId } = req.body;
+        if (!driverId) {
+            return res.status(400).json({ message: "Driver ID required" });
+        }
+
+        const { rows } = await pool.query(
+            "SELECT driver_id, started FROM carpool_rides WHERE id = $1",
+            [req.params.id]
+        );
+        if (!rows[0]) return res.status(404).json({ message: "Carpool not found" });
+        
+        if (rows[0].driver_id !== driverId) {
+            return res.status(403).json({ message: "Only the driver can start this carpool" });
+        }
+        
+        if (rows[0].started) {
+            return res.status(400).json({ message: "Carpool already started" });
+        }
+
+        await pool.query(
+            "UPDATE carpool_rides SET started = TRUE, started_at = NOW() WHERE id = $1",
+            [req.params.id]
+        );
+        res.json({ message: "Carpool started successfully" });
+    } catch (err) {
+        console.error("carpool start error:", err.message);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
 // ── GET /api/carpool/my/:userId — User's rides (as driver) + bookings (as rider) ─
 router.get("/my/:userId", async (req, res) => {
     try {
@@ -310,6 +361,8 @@ function formatRow(r) {
         availableSeats: r.available_seats,
         pricePerSeat: r.price_per_seat ? parseFloat(r.price_per_seat) : 0,
         status: r.status,
+        started: r.started || false,
+        startedAt: r.started_at,
         pendingCount: r.pending_count ? parseInt(r.pending_count) : 0,
         createdAt: r.created_at,
     };
