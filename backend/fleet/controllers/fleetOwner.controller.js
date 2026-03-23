@@ -98,6 +98,24 @@ const loginOwner = async (req, res) => {
             });
         }
 
+        // Demo credentials for fleet owner
+        if (normalizedEmail === "demofleet@demo.com" && password === "demo123" && resolvedType === "fleet") {
+            return res.json({
+                message: "Login successful",
+                owner: {
+                    _id: "demo_fleet_owner_001",
+                    email: "demofleet@demo.com",
+                    name: "Demo Fleet Owner",
+                    phone: "+91-98765-43210",
+                    companyName: "Demo Fleet Services",
+                    totalVehicles: 25,
+                    ownerType: "fleet",
+                    verified: true,
+                    _portalType: "fleet",
+                }
+            });
+        }
+
         // First check if *any* account exists with this email
         const ownerAny = await FleetOwner.findOne({ email: normalizedEmail });
         if (!ownerAny) {

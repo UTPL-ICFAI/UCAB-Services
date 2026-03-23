@@ -336,6 +336,12 @@ const UserPage = () => {
       .catch(() => { });
   }, [tkn]);
 
+  /* ─── Auto-detect GPS location on component mount ────────────── */
+  useEffect(() => {
+    // Automatically detect user location when page loads
+    detectGPS(0);
+  }, []);
+
   useEffect(() => {
     if (!user?._id) return;
     axios.get(`${BACKEND_URL}/api/auth/user/trips?userId=${user._id}&limit=50`)
