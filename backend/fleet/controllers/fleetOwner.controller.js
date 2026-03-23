@@ -80,6 +80,24 @@ const loginOwner = async (req, res) => {
         const resolvedType = ownerType === "rental" ? "rental" : "fleet";
         const normalizedEmail = email.toLowerCase().trim();
 
+        // Demo credentials for rental owner
+        if (normalizedEmail === "rentalowner@demo.com" && password === "demo123" && resolvedType === "rental") {
+            return res.json({
+                message: "Login successful",
+                owner: {
+                    _id: "demo_rental_owner_001",
+                    email: "rentalowner@demo.com",
+                    name: "Demo Rental Provider",
+                    phone: "+91-98765-43210",
+                    company: "Demo Rentals",
+                    totalVehicles: 5,
+                    ownerType: "rental",
+                    verified: true,
+                    _portalType: "rental",
+                }
+            });
+        }
+
         // First check if *any* account exists with this email
         const ownerAny = await FleetOwner.findOne({ email: normalizedEmail });
         if (!ownerAny) {

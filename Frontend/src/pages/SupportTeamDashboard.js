@@ -4,6 +4,48 @@ import axios from "axios";
 import BACKEND_URL from "../config";
 import { THEME } from "../theme";
 
+// Global animations
+const animationStyles = `
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @keyframes slideInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+`;
+
+// Inject animations
+if (!document.getElementById("support-dashboard-animations")) {
+    const styleSheet = document.createElement("style");
+    styleSheet.id = "support-dashboard-animations";
+    styleSheet.textContent = animationStyles;
+    document.head.appendChild(styleSheet);
+}
+
 export default function SupportTeamDashboard() {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("tickets");
@@ -82,10 +124,21 @@ export default function SupportTeamDashboard() {
             {/* Header */}
             <div style={styles.header}>
                 <div style={styles.headerContent}>
-                    <h1 style={styles.title}>💬 Support Team Dashboard</h1>
+                    <h1 style={styles.title}>Support Center</h1>
                     <div style={styles.userInfo}>
                         <span>👤 {team.name || "Support"}</span>
-                        <button onClick={handleLogout} style={styles.logoutBtn}>
+                        <button 
+                            onClick={handleLogout} 
+                            style={styles.logoutBtn}
+                            onMouseEnter={(e) => {
+                                e.target.style.background = "rgba(244, 67, 54, 0.25)";
+                                e.target.style.borderColor = "rgba(244, 67, 54, 0.5)";
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.background = "rgba(244, 67, 54, 0.15)";
+                                e.target.style.borderColor = "rgba(244, 67, 54, 0.4)";
+                            }}
+                        >
                             Logout
                         </button>
                     </div>
@@ -108,11 +161,24 @@ export default function SupportTeamDashboard() {
                                 activeTab === tab
                                     ? THEME.colors.secondary
                                     : "rgba(255, 255, 255, 0.6)",
+                            backgroundColor: activeTab === tab ? "rgba(0, 208, 132, 0.05)" : "transparent",
+                        }}
+                        onMouseEnter={(e) => {
+                            if (activeTab !== tab) {
+                                e.target.style.color = "rgba(255, 255, 255, 0.8)";
+                                e.target.style.backgroundColor = "rgba(255, 255, 255, 0.02)";
+                            }
+                        }}
+                        onMouseLeave={(e) => {
+                            if (activeTab !== tab) {
+                                e.target.style.color = "rgba(255, 255, 255, 0.6)";
+                                e.target.style.backgroundColor = "transparent";
+                            }
                         }}
                     >
-                        {tab === "tickets" && "🎟️ Tickets"}
-                        {tab === "traffic" && "📊 Live Traffic"}
-                        {tab === "stats" && "📈 Database Stats"}
+                        {tab === "tickets" && "🎟️  Tickets"}
+                        {tab === "traffic" && "🚗  Live Traffic"}
+                        {tab === "stats" && "📊  Stats"}
                     </button>
                 ))}
             </div>
@@ -135,6 +201,18 @@ export default function SupportTeamDashboard() {
                                             key={ticket.id}
                                             style={styles.ticketCard}
                                             onClick={() => setSelectedTicket(ticket)}
+                                            onMouseEnter={(e) => {
+                                                e.currentTarget.style.background = "linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(0, 208, 132, 0.1) 100%)";
+                                                e.currentTarget.style.borderColor = "rgba(0, 208, 132, 0.4)";
+                                                e.currentTarget.style.transform = "translateY(-2px)";
+                                                e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3)";
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.background = styles.ticketCard.background;
+                                                e.currentTarget.style.borderColor = styles.ticketCard.border.split(" ")[1];
+                                                e.currentTarget.style.transform = "translateY(0)";
+                                                e.currentTarget.style.boxShadow = "none";
+                                            }}
                                         >
                                             <div style={styles.ticketHeader}>
                                                 <h3 style={styles.ticketSubject}>
@@ -221,6 +299,20 @@ export default function SupportTeamDashboard() {
                                 <p style={styles.detailValue}>
                                     {selectedTicket.description || "No description"}
                                 </p>
+                            </div>
+
+                            {/* Call User Feature */}
+                            <div style={styles.callSection}>
+                                <button
+                                    onClick={() => {
+                                        if (selectedTicket.user_phone) {
+                                            window.location.href = `tel:${selectedTicket.user_phone}`;
+                                        }
+                                    }}
+                                    style={styles.callButton}
+                                >
+                                    📞 Call User ({selectedTicket.user_phone || "N/A"})
+                                </button>
                             </div>
 
                             <hr
@@ -463,10 +555,11 @@ const styles = {
         fontFamily: "'Inter', sans-serif",
     },
     header: {
-        background: "rgba(15, 20, 25, 0.7)",
-        borderBottom: "1px solid rgba(0, 208, 132, 0.2)",
-        padding: "20px 30px",
+        background: "linear-gradient(135deg, rgba(15, 20, 25, 0.95) 0%, rgba(0, 208, 132, 0.05) 100%)",
+        borderBottom: "2px solid rgba(0, 208, 132, 0.3)",
+        padding: "24px 30px",
         backdropFilter: "blur(10px)",
+        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.2)",
     },
     headerContent: {
         display: "flex",
@@ -476,79 +569,87 @@ const styles = {
         margin: "0 auto",
     },
     title: {
-        fontSize: "24px",
+        fontSize: "28px",
         fontWeight: "700",
+        background: "linear-gradient(135deg, #00d084 0%, #00a860 100%)",
+        WebkitBackgroundClip: "text",
+        WebkitTextFillColor: "transparent",
+        margin: 0,
     },
     userInfo: {
         display: "flex",
         alignItems: "center",
-        gap: "20px",
+        gap: "24px",
         fontSize: "14px",
     },
     logoutBtn: {
-        background: "rgba(244, 67, 54, 0.2)",
-        border: "1px solid rgba(244, 67, 54, 0.3)",
+        background: "rgba(244, 67, 54, 0.15)",
+        border: "1px solid rgba(244, 67, 54, 0.4)",
         color: "#ff6b6b",
-        padding: "8px 16px",
-        borderRadius: "6px",
+        padding: "10px 20px",
+        borderRadius: "8px",
         cursor: "pointer",
         fontSize: "13px",
-        fontWeight: "500",
+        fontWeight: "600",
         transition: "all 0.3s ease",
     },
     tabsContainer: {
         display: "flex",
-        gap: "30px",
-        padding: "20px 30px",
+        gap: "0",
+        padding: "0 30px",
         maxWidth: "1400px",
         margin: "0 auto",
         borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+        background: "rgba(15, 20, 25, 0.4)",
     },
     tab: {
         background: "none",
         border: "none",
         color: "rgba(255, 255, 255, 0.6)",
-        fontSize: "14px",
+        fontSize: "15px",
         fontWeight: "600",
         cursor: "pointer",
-        paddingBottom: "12px",
-        borderBottom: "2px solid transparent",
+        padding: "16px 24px",
+        borderBottom: "3px solid transparent",
         transition: "all 0.3s ease",
+        position: "relative",
     },
     container: {
         maxWidth: "1400px",
         margin: "0 auto",
-        padding: "40px 30px",
+        padding: "32px 30px",
     },
     section: {
         animation: "slideUp 0.6s ease-out",
     },
     sectionTitle: {
-        fontSize: "20px",
+        fontSize: "22px",
         fontWeight: "700",
-        marginBottom: "20px",
+        marginBottom: "24px",
+        color: "#fff",
     },
     loader: {
         textAlign: "center",
-        padding: "40px",
-        color: "rgba(255, 255, 255, 0.6)",
+        padding: "60px 20px",
+        color: "rgba(255, 255, 255, 0.5)",
+        fontSize: "16px",
     },
     empty: {
         textAlign: "center",
-        padding: "60px 20px",
-        color: "rgba(255, 255, 255, 0.4)",
-        fontSize: "14px",
+        padding: "80px 20px",
+        color: "rgba(255, 255, 255, 0.3)",
+        fontSize: "15px",
     },
     ticketsList: {
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+        gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
         gap: "16px",
     },
     ticketCard: {
-        background: "rgba(255, 255, 255, 0.05)",
-        border: "1px solid rgba(255, 255, 255, 0.1)",
+        background: "linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(0, 208, 132, 0.05) 100%)",
+        border: "1px solid rgba(0, 208, 132, 0.2)",
         borderRadius: "12px",
-        padding: "16px",
+        padding: "18px",
         cursor: "pointer",
         transition: "all 0.3s ease",
     },
@@ -557,31 +658,33 @@ const styles = {
         justifyContent: "space-between",
         alignItems: "start",
         gap: "12px",
-        marginBottom: "12px",
+        marginBottom: "14px",
     },
     ticketSubject: {
-        fontSize: "14px",
-        fontWeight: "600",
+        fontSize: "15px",
+        fontWeight: "700",
         flex: 1,
+        color: "#fff",
     },
     statusBadge: {
         fontSize: "10px",
         fontWeight: "700",
-        padding: "4px 8px",
-        borderRadius: "4px",
+        padding: "6px 10px",
+        borderRadius: "6px",
         color: "#fff",
         textTransform: "uppercase",
         whiteSpace: "nowrap",
+        fontFamily: "'Inter', sans-serif",
     },
     ticketUser: {
-        fontSize: "12px",
+        fontSize: "13px",
         color: "rgba(255, 255, 255, 0.7)",
-        marginBottom: "6px",
+        marginBottom: "8px",
     },
     ticketCategory: {
         fontSize: "12px",
         color: "rgba(255, 255, 255, 0.6)",
-        marginBottom: "6px",
+        marginBottom: "8px",
     },
     ticketTime: {
         fontSize: "11px",
@@ -593,136 +696,179 @@ const styles = {
         left: 0,
         right: 0,
         bottom: 0,
-        background: "rgba(0, 0, 0, 0.7)",
+        background: "rgba(0, 0, 0, 0.85)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         zIndex: 1000,
         animation: "slideInUp 0.3s ease",
+        backdropFilter: "blur(5px)",
     },
     modalContent: {
-        background: "rgba(15, 20, 25, 0.95)",
-        border: "1px solid rgba(255, 255, 255, 0.1)",
+        background: "linear-gradient(135deg, rgba(15, 20, 25, 0.98) 0%, rgba(20, 30, 40, 0.95) 100%)",
+        border: "1px solid rgba(0, 208, 132, 0.2)",
         borderRadius: "16px",
-        padding: "30px",
-        maxWidth: "600px",
-        width: "90%",
-        maxHeight: "80vh",
+        padding: "32px",
+        maxWidth: "650px",
+        width: "92%",
+        maxHeight: "85vh",
         overflowY: "auto",
-        backdropFilter: "blur(10px)",
+        backdropFilter: "blur(12px)",
         position: "relative",
+        boxShadow: "0 20px 60px rgba(0, 0, 0, 0.4)",
     },
     closeBtn: {
         position: "absolute",
-        top: "15px",
-        right: "15px",
-        background: "none",
+        top: "20px",
+        right: "20px",
+        background: "rgba(255, 255, 255, 0.1)",
         border: "none",
-        color: "rgba(255, 255, 255, 0.6)",
-        fontSize: "20px",
+        color: "rgba(255, 255, 255, 0.7)",
+        fontSize: "24px",
         cursor: "pointer",
+        padding: "4px 8px",
+        borderRadius: "6px",
+        transition: "all 0.3s ease",
+        lineHeight: 1,
     },
     modalTitle: {
-        fontSize: "20px",
+        fontSize: "22px",
         fontWeight: "700",
-        marginBottom: "20px",
+        marginBottom: "24px",
+        color: "#00d084",
     },
     detailsGrid: {
         display: "grid",
         gridTemplateColumns: "1fr 1fr",
-        gap: "16px",
-        marginBottom: "20px",
+        gap: "20px",
+        marginBottom: "24px",
     },
     detailLabel: {
-        fontSize: "12px",
-        fontWeight: "600",
-        color: "rgba(255, 255, 255, 0.6)",
+        fontSize: "11px",
+        fontWeight: "700",
+        color: "rgba(255, 255, 255, 0.5)",
         textTransform: "uppercase",
-        marginBottom: "6px",
+        marginBottom: "8px",
         display: "block",
+        letterSpacing: "0.5px",
     },
     detailValue: {
-        fontSize: "14px",
-        color: "rgba(255, 255, 255, 0.9)",
+        fontSize: "15px",
+        fontWeight: "500",
+        color: "#fff",
+    },
+    callSection: {
+        margin: "20px 0",
+        padding: "16px",
+        background: "linear-gradient(135deg, rgba(0, 153, 255, 0.1) 0%, rgba(0, 208, 132, 0.05) 100%)",
+        borderRadius: "10px",
+        border: "1px solid rgba(0, 153, 255, 0.2)",
+    },
+    callButton: {
+        width: "100%",
+        background: "linear-gradient(135deg, #0099ff 0%, #0077cc 100%)",
+        border: "none",
+        color: "#fff",
+        padding: "14px",
+        borderRadius: "8px",
+        fontWeight: "700",
+        cursor: "pointer",
+        fontSize: "15px",
+        transition: "all 0.3s ease",
+        fontFamily: "'Inter', sans-serif",
     },
     select: {
         width: "100%",
-        background: "rgba(255, 255, 255, 0.05)",
-        border: "1px solid rgba(255, 255, 255, 0.1)",
+        background: "rgba(30, 40, 50, 0.8)",
+        border: "1px solid rgba(0, 208, 132, 0.2)",
         color: "#fff",
-        padding: "10px 12px",
-        borderRadius: "6px",
-        fontSize: "13px",
+        padding: "12px 14px",
+        borderRadius: "8px",
+        fontSize: "14px",
+        outline: "none",
+        transition: "all 0.3s ease",
+        fontFamily: "'Inter', sans-serif",
+        fontWeight: "500",
     },
     textarea: {
         width: "100%",
-        background: "rgba(255, 255, 255, 0.05)",
+        background: "rgba(30, 40, 50, 0.8)",
         border: "1px solid rgba(255, 255, 255, 0.1)",
         color: "#fff",
-        padding: "10px 12px",
-        borderRadius: "6px",
-        fontSize: "13px",
-        minHeight: "80px",
+        padding: "12px 14px",
+        borderRadius: "8px",
+        fontSize: "14px",
+        minHeight: "90px",
         resize: "vertical",
         fontFamily: "'Inter', sans-serif",
+        outline: "none",
+        transition: "all 0.3s ease",
     },
     modalActions: {
         display: "flex",
         gap: "12px",
-        marginTop: "24px",
+        marginTop: "28px",
     },
     cancelBtn: {
         flex: 1,
-        background: "rgba(255, 255, 255, 0.05)",
-        border: "1px solid rgba(255, 255, 255, 0.1)",
+        background: "rgba(255, 255, 255, 0.08)",
+        border: "1px solid rgba(255, 255, 255, 0.15)",
         color: "#fff",
-        padding: "10px",
-        borderRadius: "6px",
+        padding: "12px",
+        borderRadius: "8px",
         cursor: "pointer",
-        fontSize: "13px",
+        fontSize: "14px",
         fontWeight: "600",
+        transition: "all 0.3s ease",
+        fontFamily: "'Inter', sans-serif",
     },
     submitBtn: {
         flex: 1,
         background: "linear-gradient(135deg, #00d084 0%, #00a860 100%)",
         border: "none",
-        color: "#fff",
-        padding: "10px",
-        borderRadius: "6px",
+        color: "#000",
+        padding: "12px",
+        borderRadius: "8px",
         cursor: "pointer",
-        fontSize: "13px",
-        fontWeight: "600",
+        fontSize: "14px",
+        fontWeight: "700",
+        transition: "all 0.3s ease",
+        fontFamily: "'Inter', sans-serif",
     },
     statsGrid: {
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-        gap: "16px",
+        gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+        gap: "18px",
     },
     statCard: {
-        background: "rgba(255, 255, 255, 0.05)",
-        border: "1px solid rgba(255, 255, 255, 0.1)",
-        borderRadius: "12px",
-        padding: "20px",
+        background: "linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(0, 208, 132, 0.05) 100%)",
+        border: "1px solid rgba(0, 208, 132, 0.2)",
+        borderRadius: "14px",
+        padding: "24px",
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
-        gap: "16px",
+        textAlign: "center",
         transition: "all 0.3s ease",
     },
     statIcon: {
-        fontSize: "32px",
+        fontSize: "40px",
+        marginBottom: "12px",
     },
     statContent: {
         flex: 1,
+        width: "100%",
     },
     statLabel: {
         fontSize: "12px",
         color: "rgba(255, 255, 255, 0.6)",
         fontWeight: "500",
-        marginBottom: "4px",
+        marginBottom: "8px",
+        textTransform: "uppercase",
     },
     statValue: {
-        fontSize: "24px",
+        fontSize: "28px",
         fontWeight: "700",
-        color: "rgba(0, 208, 132, 0.9)",
+        color: "#00d084",
     },
 };
