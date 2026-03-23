@@ -120,6 +120,7 @@ const UserPage = () => {
   const [tripOtp, setTripOtp] = useState("");
   const [toast, setToast] = useState("");
   const [payMethod, setPayMethod] = useState("cash");
+  const [includeInsurance, setIncludeInsurance] = useState(false); // NEW: Insurance checkbox state
 
   /* ─── Schedule / arrival state ────────────────────────────── */
   const [bookingMode, setBookingMode] = useState("now");
@@ -588,17 +589,22 @@ const UserPage = () => {
   /* ─── P0 Helpers ─────────────────────────────────────────── */
 
   // GPS auto-detect pickup with enhanced error handling and permission checks
-  const detectGPS = () => {
+  const detectGPS = (retryCount = 0) => {
     if (!navigator.geolocation) { 
       showToast("⚠️ Geolocation not supported on this browser. Enable location permissions."); 
       return; 
     }
     setGpsLoading(true);
     
-    // Timeout wrapper
+    // Timeout wrapper with retry logic
     const timeoutId = setTimeout(() => {
       setGpsLoading(false);
-      showToast("⏱️ Location request timed out. Please enable location access and try again.");
+      if (retryCount < 1) {
+        showToast("⏱️ GPS timeout. Retrying...");
+        setTimeout(() => detectGPS(retryCount + 1), 500); // Retry once
+      } else {
+        showToast("⏱️ Location request timed out. Please enable location access and try again.");
+      }
     }, 12000);
 
     navigator.geolocation.getCurrentPosition(
@@ -611,7 +617,7 @@ const UserPage = () => {
         
         try {
           const r = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&timeout=5`,
             { headers: { "Accept-Language": "en" } }
           );
           if (!r.ok) throw new Error("Geocoding service unavailable");
@@ -623,7 +629,7 @@ const UserPage = () => {
         } catch (geocodeErr) {
           console.warn("Geocoding failed, using coordinates:", geocodeErr);
           setPickup({ lat, lng, address: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
-          showToast("📍 Using GPS coordinates. Reverse geocoding unavailable.");
+          showToast("📍 Using GPS coordinates. Address unavailable, but location is accurate.");
         }
         setGpsLoading(false);
       },
@@ -631,23 +637,20 @@ const UserPage = () => {
         clearTimeout(timeoutId);
         setGpsLoading(false);
         
-        // Detailed error messages
+        // Detailed error messages with action steps
         const errorMessages = {
-          1: "❌ Location permission denied. Enable GPS in settings to continue.",
-          2: "⚠️ Could not determine your position. Please try again or select manually.",
-          3: "⏱️ Location request timed out. Check your GPS and try again.",
-          "PermissionDenied": "❌ Location permission denied. Go to Settings → Privacy → Location and enable access.",
-          "PositionUnavailable": "⚠️ Your device cannot determine GPS location. Manual selection recommended.",
-          "Timeout": "⏱️ GPS took too long to respond. Please try again.",
+          1: "❌ Permission Denied\nPlease enable location access in Settings → Privacy → Location and select 'Always'",
+          2: "⚠️ Position Unavailable\nYour device cannot detect GPS. Try going outside or try again.",
+          3: "⏱️ GPS Timeout\nLocation is taking too long. Try selecting location manually or disable location history.",
         };
         
-        const message = errorMessages[err.code] || errorMessages[err.message] || "❌ Could not fetch location";
+        const message = errorMessages[err.code] || "❌ Could not fetch location. Please try again or select manually.";
         showToast(message);
-        console.error("Geolocation error:", err);
+        console.error("Geolocation error code:", err.code, "message:", err.message);
       },
       { 
         timeout: 10000,      // Wait 10 seconds for response
-        maximumAge: 30000,   // Use cached position if less than 30 secs old
+        maximumAge: 0,       // Don't use cached position - get fresh GPS
         enableHighAccuracy: true 
       }
     );
@@ -1741,20 +1744,57 @@ const UserPage = () => {
                       })}
                     </div>
 
+                    {/* ── Insurance Option ── */}
+                    <div style={{
+                      background: "rgba(0,208,132,0.05)",
+                      border: "1px solid rgba(0,208,132,0.2)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      marginBottom: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      cursor: "pointer",
+                      transition: "all 0.2s"
+                    }}
+                      onClick={() => setIncludeInsurance(!includeInsurance)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={includeInsurance}
+                        onChange={(e) => setIncludeInsurance(e.target.checked)}
+                        style={{ width: 18, height: 18, cursor: "pointer" }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>🛡️ Add Insurance</div>
+                        <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>Covers trip damage & injuries (₹{Math.max(25, Math.round(fare * 0.05))} extra)</div>
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: includeInsurance ? "#00d084" : "#666" }}>
+                        +₹{Math.max(25, Math.round(fare * 0.05))}
+                      </div>
+                    </div>
+
                     <div className="fare-summary-row">
                       <div>
                         <div style={{ fontSize: 13, color: "#888" }}>Estimated fare</div>
                         <div className="fare-amount">
-                          ₹{Math.max(10, fare - promoDiscount) + 1}
-                          {promoDiscount > 0 && <span style={{ fontSize: 12, color: "#1db954", marginLeft: 6, textDecoration: "line-through", opacity: 0.6 }}>₹{fare + 1}</span>}
+                          ₹{Math.max(10, fare - promoDiscount) + (includeInsurance ? Math.max(25, Math.round(fare * 0.05)) : 0)}
+                          {promoDiscount > 0 && <span style={{ fontSize: 12, color: "#1db954", marginLeft: 6, textDecoration: "line-through", opacity: 0.6 }}>₹{fare + (includeInsurance ? Math.max(25, Math.round(fare * 0.05)) : 0)}</span>}
                         </div>
                         <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>
                           {routeInfo?.distKm} km · {routeInfo?.durationMin} min ·{" "}
                           {useWallet ? "👛 Wallet" : `${PAY_METHODS.find((p) => p.id === payMethod)?.icon} ${PAY_METHODS.find((p) => p.id === payMethod)?.label}`}
                         </div>
-                        <div style={{ fontSize: 11, color: "#1db954", marginTop: 3, display: "flex", alignItems: "center", gap: 4 }}>
-                          🛡️ Includes ₹1 insurance fee
-                        </div>
+                        {includeInsurance && (
+                          <div style={{ fontSize: 11, color: "#00d084", marginTop: 3, display: "flex", alignItems: "center", gap: 4 }}>
+                            ✅ Insurance included: ₹{Math.max(25, Math.round(fare * 0.05))}
+                          </div>
+                        )}
+                        {!includeInsurance && (
+                          <div style={{ fontSize: 11, color: "#1db954", marginTop: 3, display: "flex", alignItems: "center", gap: 4 }}>
+                            🛡️ Includes ₹1 insurance fee
+                          </div>
+                        )}
                         {promoMsg && <div style={{ fontSize: 11, color: "#f6ad55", marginTop: 2 }}>{promoMsg}</div>}
                       </div>
                       <button className="book-btn-inline" onClick={requestRide}>

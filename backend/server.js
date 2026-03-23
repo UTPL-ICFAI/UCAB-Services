@@ -497,6 +497,8 @@ io.on("connection", (socket) => {
     // ── Captain completes ride ───────────────────────────────
     socket.on("complete ride", async ({ rideId, captainId, fare }) => {
         try {
+            const ride = await Ride.findById(rideId).catch(() => null);
+            
             await Ride.findByIdAndUpdate(rideId, { status: "completed" });
 
             if (captainId) {
@@ -513,8 +515,40 @@ io.on("connection", (socket) => {
                 }
             }
 
+            // ──── NEW: Transfer fare from rider wallet to captain wallet ────
+            if (ride?.riderId && captainId && (fare || 0) > 0) {
+                try {
+                    // Deduct from rider wallet
+                    await pool.query(
+                        "UPDATE users SET wallet_balance = GREATEST(wallet_balance - $1, 0) WHERE id = $2",
+                        [fare, ride.riderId]
+                    );
+                    
+                    // Add to captain wallet
+                    await pool.query(
+                        "UPDATE captains SET wallet_balance = COALESCE(wallet_balance, 0) + $1 WHERE id = $2",
+                        [fare, captainId]
+                    );
+                    
+                    // Log wallet transactions for both parties
+                    await Promise.all([
+                        pool.query(
+                            "INSERT INTO wallet_transactions (user_id, type, amount, description, created_at) VALUES ($1, $2, $3, $4, NOW())",
+                            [ride.riderId, "debit", fare, `Ride completed - Fare paid to ${ride.captain_name || "Captain"} (Ride #${rideId})`]
+                        ),
+                        pool.query(
+                            "INSERT INTO captain_wallet_transactions (captain_id, type, amount, description, created_at) VALUES ($1, $2, $3, $4, NOW())",
+                            [captainId, "credit", fare, `Ride completed - Fare received from rider (Ride #${rideId})`]
+                        )
+                    ]).catch(() => {});
+                    
+                    console.log(`💰 Wallet transfer: ₹${fare} from rider ${ride.riderId} to captain ${captainId}`);
+                } catch (walletErr) {
+                    console.error("Wallet transfer error:", walletErr.message);
+                }
+            }
+
             // Award loyalty points to rider: 1 point per ₹10 spent (min 1 point)
-            const ride = await Ride.findById(rideId).catch(() => null);
             if (ride?.riderId) {
                 const points = Math.max(1, Math.floor((fare || 0) / 10));
                 pool.query(
