@@ -1,0 +1,441 @@
+/* UserPage Modern Styling */
+
+:root {
+  --primary-color: #000000;
+  --secondary-color: #00d084;
+  --info-color: #0099ff;
+  --warning-color: #ffc107;
+  --danger-color: #e74c3c;
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #1a1a1a;
+  --border-color: #2a2a2a;
+}
+
+.uber-layout {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ─── Top Bar Enhancements ─── */
+.top-bar {
+  background: linear-gradient(135deg, rgba(0,0,0,0.95) 0%, rgba(10,10,10,0.92) 100%);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0,208,132,0.08);
+}
+
+.top-bar-logo {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+}
+
+.logo-accent {
+  color: var(--secondary-color);
+  margin-left: 6px;
+}
+
+.top-bar-right button {
+  transition: all 0.2s ease;
+}
+
+.top-bar-right button:hover {
+  background: rgba(0, 208, 132, 0.2) !important;
+  transform: scale(1.05);
+}
+
+.account-btn {
+  border-radius: 12px !important;
+  padding: 8px !important;
+}
+
+.account-btn:hover {
+  background: rgba(0, 208, 132, 0.15) !important;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, var(--secondary-color), var(--info-color));
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+/* ─── Account Drawer ─── */
+.drawer-overlay {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.account-drawer {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, #0f0f15 100%);
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  box-shadow: 0 -8px 32px rgba(0, 208, 132, 0.1);
+}
+
+.drawer-header {
+  border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(135deg, rgba(0,208,132,0.05) 0%, transparent 100%);
+}
+
+.drawer-avatar {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, var(--secondary-color), var(--info-color));
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  font-weight: bold;
+  font-size: 20px;
+}
+
+.drawer-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.drawer-phone {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* ─── Bottom Sheet Enhancements ─── */
+.draggable-sheet {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, #0a0a0f 100%);
+  border: 1px solid var(--border-color);
+  border-top: 2px solid var(--secondary-color);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.sheet-handle {
+  background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+  opacity: 0.6;
+}
+
+.sheet-tabs {
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(0, 208, 132, 0.02);
+}
+
+.sheet-tab {
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+}
+
+.sheet-tab.active {
+  border-bottom-color: var(--secondary-color);
+  color: var(--secondary-color);
+  font-weight: 600;
+}
+
+.sheet-tab:hover {
+  background: rgba(0, 208, 132, 0.05);
+}
+
+/* ─── Ride Type Cards ─── */
+.ride-type-card {
+  border: 2px solid var(--border-color);
+  background: linear-gradient(135deg, rgba(0,208,132,0.02) 0%, transparent 100%);
+  border-radius: 14px;
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ride-type-card:hover {
+  border-color: var(--secondary-color);
+  background: linear-gradient(135deg, rgba(0,208,132,0.08) 0%, rgba(0,208,132,0.02) 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 208, 132, 0.12);
+}
+
+.ride-type-card.selected {
+  border-color: var(--secondary-color);
+  background: linear-gradient(135deg, rgba(0,208,132,0.15) 0%, rgba(0,208,132,0.05) 100%);
+  box-shadow: 0 12px 32px rgba(0, 208, 132, 0.2);
+}
+
+.ride-type-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.ride-type-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ride-type-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.ride-type-price {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--secondary-color);
+  margin-top: 6px;
+}
+
+/* ─── Location Input ─── */
+.location-input-container {
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.location-input-container:focus-within {
+  border-color: var(--secondary-color);
+  box-shadow: 0 0 0 3px rgba(0, 208, 132, 0.1);
+}
+
+.location-input {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.location-input::placeholder {
+  color: var(--text-secondary);
+}
+
+/* ─── Buttons Enhanced ─── */
+.book-btn {
+  background: linear-gradient(135deg, var(--secondary-color) 0%, #00a860 100%);
+  color: #000;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 208, 132, 0.3);
+}
+
+.book-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 208, 132, 0.4);
+}
+
+.book-btn:active {
+  transform: translateY(0);
+}
+
+.cancel-btn {
+  background: linear-gradient(135deg, var(--danger-color) 0%, #c7372a 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+}
+
+.cancel-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(231, 76, 60, 0.4);
+}
+
+/* ─── Payment Method Selection ─── */
+.payment-method-btn {
+  border: 2px solid var(--border-color);
+  background: transparent;
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.payment-method-btn:hover {
+  border-color: var(--secondary-color);
+  background: rgba(0, 208, 132, 0.05);
+}
+
+.payment-method-btn.selected {
+  border-color: var(--secondary-color);
+  background: rgba(0, 208, 132, 0.12);
+  color: var(--secondary-color);
+  font-weight: 600;
+}
+
+/* ─── Modals ─── */
+.support-modal-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+}
+
+.support-modal {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, #0a0a0f 100%);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+}
+
+.support-modal-header {
+  border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(135deg, rgba(0,208,132,0.05) 0%, transparent 100%);
+}
+
+.support-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.support-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.9;
+}
+
+.support-select,
+.support-textarea {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 10px;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.support-select:focus,
+.support-textarea:focus {
+  border-color: var(--secondary-color);
+  box-shadow: 0 0 0 3px rgba(0, 208, 132, 0.1);
+  outline: none;
+}
+
+.support-submit-btn {
+  background: linear-gradient(135deg, var(--secondary-color) 0%, #00a860 100%);
+  color: #000;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 208, 132, 0.3);
+}
+
+.support-submit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 208, 132, 0.4);
+}
+
+/* ─── Status Pills ─── */
+.support-status-pill {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  display: inline-block;
+}
+
+.support-status-pill.open {
+  background: rgba(0, 99, 255, 0.2);
+  color: #0099ff;
+}
+
+.support-status-pill.in_progress {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+}
+
+.support-status-pill.resolved {
+  background: rgba(0, 208, 132, 0.2);
+  color: var(--secondary-color);
+}
+
+.support-status-pill.closed {
+  background: rgba(150, 150, 150, 0.2);
+  color: #999;
+}
+
+/* ─── Toast Notifications ─── */
+.toast {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(0,208,132,0.05) 100%);
+  border: 1px solid var(--secondary-color);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 208, 132, 0.2);
+  color: var(--text-primary);
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 480px) {
+  .drawer-overlay {
+    inset: 0 0 0 0 !important;
+  }
+  
+  .account-drawer {
+    max-height: 95vh;
+    border-radius: 24px 24px 0 0;
+  }
+  
+  .support-modal {
+    margin: 20px;
+    border-radius: 20px;
+  }
+  
+  .ride-type-card {
+    padding: 12px;
+    border-radius: 12px;
+  }
+}
+
+/* ─── Animations ─── */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.drawer-overlay {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.account-drawer {
+  animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.support-modal-overlay {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.support-modal {
+  animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}

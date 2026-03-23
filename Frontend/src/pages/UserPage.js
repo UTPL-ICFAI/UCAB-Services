@@ -4,7 +4,10 @@ import axios from "axios";
 import io from "socket.io-client";
 import MapView from "../components/MapView";
 import LocationSearch from "../components/LocationSearch";
+import { Button, Card, Input, Badge, Alert } from "../components/UIKit";
+import { THEME } from "../theme";
 import BACKEND_URL from "../config";
+import "./UserPageStyles.css";
 
 /* ─── Constants ─────────────────────────────────────────────── */
 const RIDE_TYPES = [
@@ -584,30 +587,69 @@ const UserPage = () => {
 
   /* ─── P0 Helpers ─────────────────────────────────────────── */
 
-  // GPS auto-detect pickup using browser geolocation + Nominatim reverse-geocode
+  // GPS auto-detect pickup with enhanced error handling and permission checks
   const detectGPS = () => {
-    if (!navigator.geolocation) { showToast("⚠️ Geolocation not supported"); return; }
+    if (!navigator.geolocation) { 
+      showToast("⚠️ Geolocation not supported on this browser. Enable location permissions."); 
+      return; 
+    }
     setGpsLoading(true);
+    
+    // Timeout wrapper
+    const timeoutId = setTimeout(() => {
+      setGpsLoading(false);
+      showToast("⏱️ Location request timed out. Please enable location access and try again.");
+    }, 12000);
+
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords;
+        clearTimeout(timeoutId);
+        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+        
+        // Log accuracy for debugging
+        console.log(`📍 GPS: ${lat}, ${lng} (accuracy: ${accuracy}m)`);
+        
         try {
           const r = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
             { headers: { "Accept-Language": "en" } }
           );
+          if (!r.ok) throw new Error("Geocoding service unavailable");
           const data = await r.json();
           const address = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
           const short = address.split(",").slice(0, 3).join(",").trim();
           setPickup({ lat, lng, address: short });
-          showToast("📍 Location detected!");
-        } catch {
+          showToast("✅ Location detected successfully!");
+        } catch (geocodeErr) {
+          console.warn("Geocoding failed, using coordinates:", geocodeErr);
           setPickup({ lat, lng, address: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
+          showToast("📍 Using GPS coordinates. Reverse geocoding unavailable.");
         }
         setGpsLoading(false);
       },
-      (err) => { setGpsLoading(false); showToast(`⚠️ ${err.message || "Could not get location"}`); },
-      { timeout: 10000, maximumAge: 60000, enableHighAccuracy: true }
+      (err) => {
+        clearTimeout(timeoutId);
+        setGpsLoading(false);
+        
+        // Detailed error messages
+        const errorMessages = {
+          1: "❌ Location permission denied. Enable GPS in settings to continue.",
+          2: "⚠️ Could not determine your position. Please try again or select manually.",
+          3: "⏱️ Location request timed out. Check your GPS and try again.",
+          "PermissionDenied": "❌ Location permission denied. Go to Settings → Privacy → Location and enable access.",
+          "PositionUnavailable": "⚠️ Your device cannot determine GPS location. Manual selection recommended.",
+          "Timeout": "⏱️ GPS took too long to respond. Please try again.",
+        };
+        
+        const message = errorMessages[err.code] || errorMessages[err.message] || "❌ Could not fetch location";
+        showToast(message);
+        console.error("Geolocation error:", err);
+      },
+      { 
+        timeout: 10000,      // Wait 10 seconds for response
+        maximumAge: 30000,   // Use cached position if less than 30 secs old
+        enableHighAccuracy: true 
+      }
     );
   };
 

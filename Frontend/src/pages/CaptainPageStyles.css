@@ -1,0 +1,448 @@
+/* CaptainPage Modern Styling */
+
+:root {
+  --primary-color: #000000;
+  --secondary-color: #00d084;
+  --info-color: #0099ff;
+  --warning-color: #ffc107;
+  --danger-color: #e74c3c;
+  --success-color: #27ae60;
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #1a1a1a;
+  --border-color: #2a2a2a;
+}
+
+.captain-layout {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* ─── Top Bar ─── */
+.captain-topbar {
+  background: linear-gradient(135deg, rgba(0,0,0,0.95) 0%, rgba(10,10,10,0.92) 100%);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0,208,132,0.08);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 100;
+}
+
+.captain-logo {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+}
+
+.captain-logo-accent {
+  color: var(--secondary-color);
+  margin-left: 6px;
+}
+
+.captain-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1.5px solid;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.captain-status-badge.online {
+  background: rgba(0, 208, 132, 0.1);
+  border-color: var(--secondary-color);
+  color: var(--secondary-color);
+}
+
+.captain-status-badge.online:hover {
+  background: rgba(0, 208, 132, 0.2);
+}
+
+.captain-status-badge.offline {
+  background: rgba(150, 150, 150, 0.1);
+  border-color: #888;
+  color: #888;
+}
+
+.captain-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ─── Captain Info Card ─── */
+.captain-info-card {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(0,208,132,0.02) 100%);
+  border: 1px solid var(--border-color);
+  border-top: 2px solid var(--secondary-color);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0, 208, 132, 0.08);
+}
+
+.captain-avatar {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, var(--secondary-color), var(--info-color));
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  font-weight: 900;
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+
+.captain-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.captain-vehicle {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ─── Earnings Display ─── */
+.earnings-section {
+  background: linear-gradient(135deg, rgba(0,208,132,0.08) 0%, rgba(0,153,255,0.04) 100%);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.earnings-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.earnings-amount {
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--secondary-color);
+  margin-bottom: 12px;
+  letter-spacing: -1px;
+}
+
+.earnings-breakdown {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.earnings-stat {
+  flex: 1;
+}
+
+.earnings-stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.earnings-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* ─── Ride Request Card ─── */
+.ride-request-card {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(0,208,132,0.02) 100%);
+  border: 2px solid var(--border-color);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.ride-request-card:hover {
+  border-color: var(--secondary-color);
+  box-shadow: 0 8px 24px rgba(0, 208, 132, 0.12);
+  transform: translateY(-2px);
+}
+
+.ride-request-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.ride-distance {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--secondary-color);
+}
+
+.ride-pay {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--secondary-color);
+}
+
+.ride-location {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.ride-from,
+.ride-to {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.ride-pin {
+  font-size: 16px;
+  color: var(--secondary-color);
+  flex-shrink: 0;
+}
+
+.ride-address {
+  font-size: 13px;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.ride-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.ride-accept-btn {
+  flex: 1;
+  background: linear-gradient(135deg, var(--secondary-color) 0%, #00a860 100%);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  padding: 11px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 208, 132, 0.3);
+}
+
+.ride-accept-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 208, 132, 0.4);
+}
+
+.ride-reject-btn {
+  flex: 1;
+  background: transparent;
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  padding: 11px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.ride-reject-btn:hover {
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+  background: rgba(231, 76, 60, 0.05);
+}
+
+/* ─── Wallet & Account ─── */
+.wallet-section {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(0,208,132,0.02) 100%);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wallet-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wallet-icon {
+  font-size: 24px;
+}
+
+.wallet-balance {
+  display: flex;
+  flex-direction: column;
+}
+
+.wallet-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.wallet-amount {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--secondary-color);
+  margin-top: 2px;
+}
+
+/* ─── Modals & Drawers ─── */
+.captain-modal-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+}
+
+.captain-modal {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, #0a0a0f 100%);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+}
+
+.captain-drawer {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, #0a0a0f 100%);
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  box-shadow: 0 -8px 32px rgba(0, 208, 132, 0.1);
+  border-radius: 24px 24px 0 0;
+}
+
+/* ─── Trip History ─── */
+.trip-history-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  transition: all 0.2s ease;
+}
+
+.trip-history-card:hover {
+  border-color: var(--secondary-color);
+  box-shadow: 0 4px 12px rgba(0, 208, 132, 0.1);
+}
+
+.trip-route {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.trip-pin {
+  font-size: 14px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.trip-address {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.trip-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+  font-size: 12px;
+}
+
+.trip-distance {
+  color: var(--text-secondary);
+}
+
+.trip-earnings {
+  font-weight: 700;
+  color: var(--secondary-color);
+}
+
+/* ─── Rating Stars ─── */
+.rating-stars {
+  display: flex;
+  gap: 4px;
+}
+
+.star {
+  font-size: 14px;
+  color: var(--warning-color);
+}
+
+.star.empty {
+  color: var(--border-color);
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 480px) {
+  .captain-info-card,
+  .earnings-section,
+  .wallet-section {
+    border-radius: 12px;
+  }
+
+  .earnings-amount {
+    font-size: 28px;
+  }
+
+  .ride-request-card {
+    padding: 12px;
+  }
+
+  .captain-drawer {
+    border-radius: 20px 20px 0 0;
+  }
+}
+
+/* ─── Animations ─── */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ride-request-card {
+  animation: slideIn 0.3s ease-out;
+}

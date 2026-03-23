@@ -3,7 +3,10 @@ import { useNavigate } from "react-router-dom";
 import io from "socket.io-client";
 import axios from "axios";
 import MapView from "../components/MapView";
+import { Button, Card, Badge, Alert } from "../components/UIKit";
+import { THEME } from "../theme";
 import BACKEND_URL from "../config";
+import "./CaptainPageStyles.css";
 
 const CaptainPage = () => {
   const navigate = useNavigate();
@@ -11,12 +14,39 @@ const CaptainPage = () => {
   const tkn = localStorage.getItem("ucab_token");
 
   const socketRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
+  
   if (!socketRef.current) {
-    socketRef.current = io(BACKEND_URL, { auth: { token: tkn } });
+    socketRef.current = io(BACKEND_URL, {
+      auth: { token: tkn },
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: Infinity,  // Keep trying to reconnect
+      transports: ["websocket", "polling"],
+    });
+    
+    // Track socket events for debugging
+    socketRef.current.on("connect", () => {
+      reconnectAttemptsRef.current = 0;
+      console.log("🟢 Socket connected");
+    });
+    
+    socketRef.current.on("disconnect", (reason) => {
+      console.log("🔴 Socket disconnected:", reason);
+    });
+    
+    socketRef.current.on("connect_error", (error) => {
+      console.error("⚠️ Socket error:", error);
+    });
   }
   const socket = socketRef.current;
 
-  const [isOnline, setIsOnline] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => {
+    // Restore online status from session if available
+    return localStorage.getItem("captain_online_status") === "true";
+  });
+  
   const [connected, setConnected] = useState(false);
   const [rides, setRides] = useState([]);
   const [acceptedRide, setAcceptedRide] = useState(null);
@@ -85,9 +115,19 @@ const CaptainPage = () => {
   useEffect(() => {
     socket.on("connect", () => {
       setConnected(true);
+      console.log("✅ Captain connected to socket");
       socket.emit("captain online", { token: tkn });
       if (user?._id) socket.emit("notification:register", { userId: user._id });
+      
+      // Re-apply online status if was online before disconnect
+      if (isOnline) {
+        setTimeout(() => {
+          socket.emit("captain online", { token: tkn });
+          console.log("🟢 Captain re-synced as online");
+        }, 500);
+      }
     });
+    
     socket.on("captain profile", (profile) => {
       setEarnings(profile.earnings || 0);
       setTotalRides(profile.totalRides || 0);
@@ -99,9 +139,29 @@ const CaptainPage = () => {
         rating: profile.rating ?? stored.rating,
       }));
     });
-    socket.on("disconnect", () => setConnected(false));
-    return () => { socket.off("connect"); socket.off("captain profile"); socket.off("disconnect"); };
-  }, [socket, tkn]);
+    
+    socket.on("disconnect", () => {
+      setConnected(false);
+      console.log("❌ Captain disconnected - attempting to reconnect");
+    });
+    
+    return () => { 
+      socket.off("connect"); 
+      socket.off("captain profile"); 
+      socket.off("disconnect"); 
+    };
+  }, [socket, tkn, isOnline]);
+  
+  /* ─── Persist online status across page reloads ─────────── */
+  useEffect(() => {
+    if (isOnline) {
+      localStorage.setItem("captain_online_status", "true");
+      socket.emit("captain online", { token: tkn });
+    } else {
+      localStorage.setItem("captain_online_status", "false");
+      socket.emit("captain offline", { token: tkn });
+    }
+  }, [isOnline, socket, tkn]);
 
   /* ─── Load trip history from DB on mount ────────────────── */
   useEffect(() => {
