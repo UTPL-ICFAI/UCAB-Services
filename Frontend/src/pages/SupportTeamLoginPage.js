@@ -72,10 +72,7 @@ export default function SupportTeamLoginPage() {
                             </div>
                         )}
 
-                        {/* Demo credentials hint */}
-                        <div style={styles.hintBox}>
-                            <span style={styles.hintText}>📝 Demo: username=<strong>test</strong>, password=<strong>test</strong></span>
-                        </div>
+                        {/* Demo credentials hint - REMOVED FOR PRODUCTION */}
 
                         {/* Username field */}
                         <div style={styles.formGroup}>

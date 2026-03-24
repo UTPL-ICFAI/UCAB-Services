@@ -22,6 +22,7 @@ const carpoolRoutes = require("./carpool.routes");
 const rentalRoutes = require("./rental.routes");
 const supportTeamRoutes = require("./support-team.routes");
 const testDataRoutes = require("./test-data.routes");
+const fixesRoutes = require("./fixes.routes");
 
 const app = express();
 const server = http.createServer(app);
@@ -92,6 +93,7 @@ app.use("/api/carpool", carpoolRoutes);
 app.use("/api/rental", rentalRoutes);
 app.use("/api/support-team", supportTeamRoutes);
 app.use("/api/test-data", testDataRoutes);
+app.use("/api/fixes", fixesRoutes);
 app.get("/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
 
 // ── In-memory: last known captain location per rideId (for tracking) ────────

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BACKEND_URL from "../config";
 import { THEME } from "../theme";
+import RentalSettlement from "./components/RentalSettlement";
 
 // Global animations
 const animationStyles = `
@@ -147,7 +148,7 @@ export default function SupportTeamDashboard() {
 
             {/* Tabs */}
             <div style={styles.tabsContainer}>
-                {["tickets", "traffic", "stats"].map((tab) => (
+                {["tickets", "settlement", "traffic", "stats"].map((tab) => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
@@ -177,6 +178,7 @@ export default function SupportTeamDashboard() {
                         }}
                     >
                         {tab === "tickets" && "🎟️  Tickets"}
+                        {tab === "settlement" && "💰 Settlement"}
                         {tab === "traffic" && "🚗  Live Traffic"}
                         {tab === "stats" && "📊  Stats"}
                     </button>
@@ -365,6 +367,14 @@ export default function SupportTeamDashboard() {
                                 </button>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {/* Settlement Tab */}
+                {activeTab === "settlement" && (
+                    <div style={styles.section}>
+                        <h2 style={styles.sectionTitle}>💰 Rental Provider Settlement</h2>
+                        <RentalSettlement token={token} />
                     </div>
                 )}
 
