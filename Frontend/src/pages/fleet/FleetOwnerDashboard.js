@@ -88,7 +88,7 @@ export default function FleetOwnerDashboard() {
             {/* Top bar */}
             <div style={topbar}>
                 <div style={{ fontWeight: 900, fontSize: 20, color: "#fff" }}>
-                    UCab <span style={{ color: "#f6ad55" }}>Fleet</span>
+                    Uride <span style={{ color: "#f6ad55" }}>Fleet</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <span style={{ color: "#888", fontSize: 13 }}>👤 {owner?.ownerName}</span>

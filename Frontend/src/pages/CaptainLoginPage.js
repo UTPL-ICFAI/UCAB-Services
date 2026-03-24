@@ -80,7 +80,7 @@ export default function CaptainLoginPage() {
 
   return (
     <div className="login-page">
-      <div className="login-logo">uride <span className="logo-accent">services</span></div>
+      <div className="login-logo">Uride <span className="logo-accent">Services</span></div>
       <div className="login-tagline">Start earning with every trip 🚗</div>
 
       <div className="login-card">

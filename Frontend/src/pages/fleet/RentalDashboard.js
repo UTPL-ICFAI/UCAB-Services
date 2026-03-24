@@ -75,7 +75,7 @@ export default function RentalDashboard() {
             {/* Top bar */}
             <div style={topbar}>
                 <div style={{ fontWeight: 900, fontSize: 20, color: "#fff" }}>
-                    uride <span style={{ color: "#f6ad55" }}>Rentals</span>
+                    Uride <span style={{ color: "#f6ad55" }}>Rentals</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <span style={{ color: "#aaa", fontSize: 13 }}>🏢 {owner?.companyName || owner?.ownerName}</span>

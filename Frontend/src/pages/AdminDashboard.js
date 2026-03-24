@@ -122,7 +122,7 @@ export default function AdminDashboard() {
 
       {/* Header */}
       <div style={{ padding: "14px 24px", background: "#0f1318", borderBottom: "1px solid #1e2530", display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 100 }}>
-        <div style={{ fontSize: 20, fontWeight: 900, color: "#fff" }}>🛡️ UCab <span style={{ color: "#f6ad55" }}>Admin</span></div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: "#fff" }}>🛡️ Uride <span style={{ color: "#f6ad55" }}>Admin</span></div>
         {msg && <div style={{ marginLeft: 16, fontSize: 13, color: msg.startsWith("✅") ? "#1db954" : "#e53935", background: msg.startsWith("✅") ? "#0d2818" : "#1a0000", padding: "5px 12px", borderRadius: 8 }}>{msg}</div>}
         <button onClick={logout} style={{ marginLeft: "auto", padding: "7px 14px", background: "#1a0000", border: "1px solid #e53935", borderRadius: 8, color: "#e53935", fontSize: 13, cursor: "pointer", fontWeight: 700 }}>Logout</button>
       </div>

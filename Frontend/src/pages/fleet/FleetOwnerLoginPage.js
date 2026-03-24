@@ -94,7 +94,7 @@ export default function FleetOwnerLoginPage() {
                 <div style={{ textAlign: "center", marginBottom: 24 }}>
                     <div style={{ fontSize: 48, marginBottom: 8 }}>🚌</div>
                     <h2 style={{ color: "#fff", fontWeight: 800, fontSize: 22, margin: 0 }}>Fleet Owner Portal</h2>
-                    <p style={{ color: "#888", fontSize: 13, marginTop: 6 }}>uride services — Manage your fleet</p>
+                    <p style={{ color: "#888", fontSize: 13, marginTop: 6 }}>Uride Services — Manage your fleet</p>
                 </div>
 
                 {/* Tabs */}

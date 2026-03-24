@@ -523,7 +523,7 @@ const CaptainPage = () => {
 
       {/* ── Top bar ── */}
       <div className="top-bar">
-        <div className="top-bar-logo">uride <span className="logo-accent">services</span></div>
+        <div className="top-bar-logo">Uride <span className="logo-accent">Services</span></div>
         <div className="top-bar-right">
           <div className="vehicle-badge">{vehicleLabel}</div>
           <button className="account-btn" onClick={() => setShowAccount(true)}>

@@ -47,7 +47,7 @@ export default function TrackingPage() {
       {/* Header */}
       <div style={{ padding: "16px 20px", background: "#111", borderBottom: "1px solid #222", display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: -1, color: "#fff" }}>
-          uride <span style={{ color: "#1db954" }}>services</span>
+          Uride <span style={{ color: "#1db954" }}>Services</span>
         </div>
         <div style={{ marginLeft: "auto", fontSize: 13, color: "#888" }}>Live Tracking</div>
       </div>
@@ -125,7 +125,7 @@ export default function TrackingPage() {
             )}
 
             <div style={{ textAlign: "center", fontSize: 12, color: "#444", marginTop: 20 }}>
-              Updates every 5 seconds · Shared via uride services
+              Updates every 5 seconds · Shared via Uride Services
             </div>
           </div>
         </>

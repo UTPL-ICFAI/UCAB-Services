@@ -939,7 +939,7 @@ const UserPage = () => {
 
       {/* Top bar */}
       <div className="top-bar">
-        <div className="top-bar-logo">uride <span className="logo-accent">services</span></div>
+        <div className="top-bar-logo">Uride <span className="logo-accent">Services</span></div>
         <div className="top-bar-right" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {/* ── New feature nav links ── */}
           <button
