@@ -159,16 +159,18 @@ app.get("/api/rides/surge", async (_req, res) => {
 const fs = require("fs");
 const path = require("path");
 
-pool.query("SELECT 1")
-    .then(() => {
+// Health check endpoint (for Render deployment monitoring)
+app.get("/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Non-blocking database initialization
+(async () => {
+    try {
+        const result = await pool.query("SELECT 1");
         console.log("✅ PostgreSQL connected");
-        return pool.query("SELECT to_regclass('public.users') AS exists");
-    })
-    .then(async (res) => {
-        if (!res.rows[0].exists) {
-            console.log("⚠️  Tables not found — running initial migration…");
-        }
-        // Run all migrations — each uses IF NOT EXISTS / IF NOT EXISTS so safe to re-run
+        
+        // Run migrations
         const migrationDir = path.join(__dirname, "db", "migrations");
         const files = fs.readdirSync(migrationDir).filter(f => f.endsWith(".sql")).sort();
         for (const file of files) {
@@ -177,8 +179,11 @@ pool.query("SELECT 1")
             console.log(`  ✅ migration: ${file}`);
         }
         console.log("✅ Database tables verified & up to date");
-    })
-    .catch((err) => console.error("❌ PostgreSQL error:", err.message));
+    } catch (err) {
+        console.error("❌ PostgreSQL error:", err.message);
+        console.warn("⚠️  Database not available - API will fail until database is reachable");
+    }
+})();
 
 // ── Socket.io auth middleware ────────────────────────────────
 // Decodes JWT and attaches userId/userRole to socket.
