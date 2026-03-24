@@ -72,7 +72,7 @@ export default function LandingPage() {
             {/* Header */}
             <div style={styles.header}>
                 <h1 style={styles.logo}>
-                    uride <span style={styles.logoAccent}>services</span>
+                    Uride <span style={styles.logoAccent}>Services</span>
                 </h1>
                 <p style={styles.tagline}>Your city, your way</p>
                 <p style={styles.subtitle}>
