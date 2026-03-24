@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import io from "socket.io-client";
 import BACKEND_URL from "../config";
 
 const user = JSON.parse(localStorage.getItem("ucab_user") || "{}");
@@ -60,6 +61,34 @@ export default function CarpoolPage() {
   const [myRides, setMyRides] = useState([]);
   const [myLoading, setMyLoading] = useState(false);
   const [respondMsg, setRespondMsg] = useState("");
+
+  // ── Socket for real-time carpool updates ───────────────────
+  useEffect(() => {
+    const socket = io(BACKEND_URL, { 
+      auth: { token: tkn },
+      reconnection: true
+    });
+
+    socket.on("carpool:seats_updated", ({ carpoolId, availableSeats, totalSeats, status }) => {
+      console.log(`🔄 Carpool ${carpoolId} seats updated: ${availableSeats}/${totalSeats}`);
+      setRides(prev => prev.map(r => 
+        r.id === carpoolId 
+          ? { ...r, availableSeats, totalSeats, status } 
+          : r
+      ));
+    });
+
+    socket.on("carpool:booking_accepted", ({ carpoolId }) => {
+      console.log(`✅ Booking accepted for carpool ${carpoolId}, refreshing...`);
+      fetchRides(); // Refresh to get latest data
+    });
+
+    return () => {
+      socket.off("carpool:seats_updated");
+      socket.off("carpool:booking_accepted");
+      socket.disconnect();
+    };
+  }, []);
 
   const fetchRides = useCallback(() => {
     setLoading(true);
