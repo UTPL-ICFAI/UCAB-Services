@@ -114,7 +114,35 @@ export default function RentalDashboard() {
                             <StatCard label="Total Earnings" value={`₹${bookings.filter(b => b.status === 'completed').reduce((sum, b) => sum + (b.total_amount || 0), 0)}`} icon="💰" color="#ffd700" />
                         </div>
                         <div style={{ marginTop: 24 }}>
-                            <h3 style={{ color: "#fff", margin: "0 0 12px" }}>📋 Recent Bookings</h3>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                                <h3 style={{ color: "#fff", margin: 0 }}>📋 Recent Bookings</h3>
+                                {vehicles.length === 0 && (
+                                    <button 
+                                        onClick={async () => {
+                                            setToast("⏳ Adding demo vehicles...");
+                                            try {
+                                                const res = await axios.post(`${BACKEND_URL}/api/test-data/seed-rental-vehicles`);
+                                                setToast(`✅ ${res.data.message}`);
+                                                fetchData();
+                                            } catch (err) {
+                                                setToast(`❌ ${err.response?.data?.message || "Failed to seed vehicles"}`);
+                                            }
+                                        }}
+                                        style={{ 
+                                            padding: "8px 16px", 
+                                            background: "#00d084", 
+                                            color: "#000", 
+                                            border: "none", 
+                                            borderRadius: 6, 
+                                            cursor: "pointer", 
+                                            fontWeight: 700,
+                                            fontSize: 12
+                                        }}
+                                    >
+                                        📦 Add Demo Vehicles
+                                    </button>
+                                )}
+                            </div>
                             {bookings.slice(0, 5).map((b) => (
                                 <div key={b._id || b.id} style={bookingCard}>
                                     <div style={{ color: "#fff", fontWeight: 700 }}>{b.clientName || "—"}</div>

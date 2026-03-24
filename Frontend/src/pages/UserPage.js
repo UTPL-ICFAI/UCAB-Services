@@ -601,74 +601,86 @@ const UserPage = () => {
 
   /* ─── P0 Helpers ─────────────────────────────────────────── */
 
-  // GPS auto-detect pickup with enhanced error handling and permission checks
+  // GPS auto-detect pickup with PROPER implementation for production
   const detectGPS = (retryCount = 0) => {
     if (!navigator.geolocation) { 
-      showToast("⚠️ Geolocation not supported on this browser. Please use HTTPS or enable location permissions."); 
-      console.warn("Geolocation API not available");
+      showToast("❌ Geolocation not available in your browser.\n• Check if you're using HTTPS\n• Try a different browser"); 
+      console.error("Geolocation API not available");
       return; 
     }
     
-    console.log(`📍 Starting GPS detection (attempt ${retryCount + 1}/2)...`);
+    console.log(`🔍 GPS Detection Attempt ${retryCount + 1}/2...`);
     setGpsLoading(true);
     
-    // Timeout wrapper with retry logic
-    const timeoutId = setTimeout(() => {
-      setGpsLoading(false);
-      if (retryCount < 1) {
-        console.warn("⏱️ GPS timeout on attempt 1, retrying...");
-        showToast("⏱️ GPS timeout. Retrying...");
-        setTimeout(() => detectGPS(retryCount + 1), 1000); // Retry once with longer delay
-      } else {
-        console.error("❌ GPS timeout on attempt 2 - giving up");
-        showToast("⏱️ Location timeout. Please check permissions in Settings or try again.");
-      }
-    }, 15000);
-
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        clearTimeout(timeoutId);
+        // SUCCESS: GPS location acquired
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-        
-        console.log(`✅ GPS acquired: ${lat}, ${lng} (accuracy: ${accuracy}m)`);
+        console.log(`✅ GPS SUCCESS: ${lat}, ${lng} (accuracy: ${accuracy}m)`);
         
         try {
+          // Try to get address from coordinates
           const r = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&timeout=5`,
             { headers: { "Accept-Language": "en" } }
           );
-          if (!r.ok) throw new Error("Geocoding service unavailable");
-          const data = await r.json();
-          const address = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-          const short = address.split(",").slice(0, 3).join(",").trim();
-          console.log(`📍 Geocoded address: ${short}`);
-          setPickup({ lat, lng, address: short });
-          showToast("✅ Location detected successfully!");
+          
+          if (r.ok) {
+            const data = await r.json();
+            const address = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            const short = address.split(",").slice(0, 3).join(",").trim();
+            console.log(`📍 Address: ${short}`);
+            setPickup({ lat, lng, address: short });
+            showToast("✅ Location detected successfully!");
+          } else {
+            throw new Error("Geocoding service unavailable");
+          }
         } catch (geocodeErr) {
+          // Geocoding failed, use coordinates only
           console.warn("⚠️ Geocoding failed:", geocodeErr.message);
           setPickup({ lat, lng, address: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
-          showToast("📍 GPS detected! Address lookup failed, using coordinates.");
+          showToast("✅ GPS detected! Using coordinates (address lookup failed)");
         }
         setGpsLoading(false);
       },
       (err) => {
-        clearTimeout(timeoutId);
+        // ERROR: GPS detection failed
+        console.error(`❌ GPS ERROR Code ${err.code}:`, err.message);
         setGpsLoading(false);
         
-        // Detailed error messages with action steps
-        const errorMessages = {
-          1: "❌ Location Permission Denied\nPlease:\n1. Check your browser address bar\n2. Click the location icon next to URL\n3. Select 'Allow' or 'Allow always'\n4. Reload the page and try again",
-          2: "⚠️ Position Unavailable\nYour device cannot detect GPS signal.\n• Try going outside\n• Wait a moment and try again\n• Or select location manually",
-          3: "⏱️ GPS Timeout\nLocation is taking too long.\n• Try refreshing the page\n• Or select location manually",
+        if (retryCount < 1) {
+          console.log("🔄 Retrying GPS detection...");
+          showToast("⏳ Retrying GPS...");
+          setTimeout(() => detectGPS(retryCount + 1), 1500);
+          return;
+        }
+        
+        // Detailed error messages
+        const errorDetails = {
+          1: {
+            title: "❌ Location Permission Denied",
+            message: "Please enable location access:\n1. Click the location icon in your address bar\n2. Select 'Allow' or 'Always Allow'\n3. Refresh page and try again\n\nOr select location manually below."
+          },
+          2: {
+            title: "⚠️ GPS Not Available",
+            message: "Your device cannot detect GPS right now:\n• Make sure location services are enabled\n• Try going outside\n• Try again in a moment\n\nOr select location manually below."
+          },
+          3: {
+            title: "⏱️ GPS Timeout",
+            message: "Location detection took too long:\n• Make sure location is enabled\n• Try refreshing the page\n• Or select location manually below"
+          }
         };
         
-        const message = errorMessages[err.code] || `❌ Location error (Code: ${err.code}). Try selecting manually.`;
-        showToast(message);
-        console.error("❌ Geolocation error:", {code: err.code, message: err.message});
+        const details = errorDetails[err.code] || {
+          title: "❌ Location Detection Failed",
+          message: "Could not detect your location.\nPlease select location manually below."
+        };
+        
+        showToast(`${details.title}\n${details.message}`);
       },
       { 
-        timeout: 13000,      // Wait 13 seconds for response
-        maximumAge: 0,       // Don't use cached position - get fresh GPS
+        timeout: 15000,      // 15 seconds timeout
+        maximumAge: 0,       // Fresh GPS only
         enableHighAccuracy: true 
       }
     );

@@ -6,7 +6,7 @@ const addVehicle = async (req, res) => {
     try {
         const {
             ownerId, vehicleType, vehicleNumber, vehicleColor,
-            driverName, driverPhone, driverAadhaar, vehicleInsurance, driverLicense, seatingCapacity,
+            driverName, driverPhone, driverAadhaar, vehicleInsurance, vehicleRegistration, pollutionCert, driverLicense, seatingCapacity,
         } = req.body;
 
         if (!ownerId || !vehicleType || !vehicleNumber || !vehicleColor ||
@@ -15,9 +15,9 @@ const addVehicle = async (req, res) => {
                 message: "All vehicle fields are required, including vehicle colour, number plate, and driver Aadhaar card",
             });
         }
-        if (!vehicleInsurance || !driverLicense) {
+        if (!vehicleInsurance || !vehicleRegistration || !pollutionCert || !driverLicense) {
             return res.status(400).json({
-                message: "Vehicle insurance certificate and driver licence are required",
+                message: "All documents are required: Insurance, Registration, Pollution Certificate, and Driver Licence",
             });
         }
 
@@ -42,6 +42,8 @@ const addVehicle = async (req, res) => {
             driverPhone,
             driverAadhaar,
             vehicleInsurance,
+            vehicleRegistration,
+            pollutionCert,
             driverLicense,
             seatingCapacity: Number(seatingCapacity),
         });

@@ -21,6 +21,8 @@ export default function FleetVehicleRegister() {
     const [driverAadhaar, setDriverAadhaar] = useState("");
     const [vehicleInsurance, setVehicleInsurance] = useState("");
     const [driverLicense, setDriverLicense] = useState("");
+    const [vehicleRegistration, setVehicleRegistration] = useState("");
+    const [pollutionCert, setPollutionCert] = useState("");
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState(null);
 
@@ -36,6 +38,14 @@ export default function FleetVehicleRegister() {
             setMsg({ type: "error", text: "Vehicle insurance certificate is required" });
             return;
         }
+        if (!vehicleRegistration) {
+            setMsg({ type: "error", text: "Vehicle registration certificate is required" });
+            return;
+        }
+        if (!pollutionCert) {
+            setMsg({ type: "error", text: "Pollution certificate is required" });
+            return;
+        }
         if (!driverLicense) {
             setMsg({ type: "error", text: "Driver licence is required" });
             return;
@@ -47,12 +57,16 @@ export default function FleetVehicleRegister() {
                 seatingCapacity: Number(form.seatingCapacity),
                 driverAadhaar,
                 vehicleInsurance,
+                vehicleRegistration,
+                pollutionCert,
                 driverLicense,
             });
             setMsg({ type: "success", text: res.data.message });
             setForm({ ownerId: "", vehicleType: "Hatchback", vehicleNumber: "", vehicleColor: "", driverName: "", driverPhone: "", seatingCapacity: "" });
             setDriverAadhaar("");
             setVehicleInsurance("");
+            setVehicleRegistration("");
+            setPollutionCert("");
             setDriverLicense("");
         } catch (err) {
             setMsg({ type: "error", text: err.response?.data?.message || "Failed to add vehicle" });
@@ -130,6 +144,22 @@ export default function FleetVehicleRegister() {
                                 if (e.target.files[0]) setVehicleInsurance(await readFileAsBase64(e.target.files[0]));
                             }} />
                         {vehicleInsurance && <span style={{ fontSize: 11, color: "#276749" }}>✓ Uploaded</span>}
+                    </div>
+                    <div className="fleet-group" style={{ maxWidth: 340 }}>
+                        <label>📋 Vehicle Registration Certificate * (mandatory)</label>
+                        <input type="file" accept="image/*,.pdf"
+                            onChange={async (e) => {
+                                if (e.target.files[0]) setVehicleRegistration(await readFileAsBase64(e.target.files[0]));
+                            }} />
+                        {vehicleRegistration && <span style={{ fontSize: 11, color: "#276749" }}>✓ Uploaded</span>}
+                    </div>
+                    <div className="fleet-group" style={{ maxWidth: 340 }}>
+                        <label>💨 Pollution Certificate * (mandatory)</label>
+                        <input type="file" accept="image/*,.pdf"
+                            onChange={async (e) => {
+                                if (e.target.files[0]) setPollutionCert(await readFileAsBase64(e.target.files[0]));
+                            }} />
+                        {pollutionCert && <span style={{ fontSize: 11, color: "#276749" }}>✓ Uploaded</span>}
                     </div>
                     <div className="fleet-group" style={{ maxWidth: 340 }}>
                         <label>🪪 Driver Licence * (mandatory)</label>
