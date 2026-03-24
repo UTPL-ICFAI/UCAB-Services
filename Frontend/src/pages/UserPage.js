@@ -604,29 +604,33 @@ const UserPage = () => {
   // GPS auto-detect pickup with enhanced error handling and permission checks
   const detectGPS = (retryCount = 0) => {
     if (!navigator.geolocation) { 
-      showToast("⚠️ Geolocation not supported on this browser. Enable location permissions."); 
+      showToast("⚠️ Geolocation not supported on this browser. Please use HTTPS or enable location permissions."); 
+      console.warn("Geolocation API not available");
       return; 
     }
+    
+    console.log(`📍 Starting GPS detection (attempt ${retryCount + 1}/2)...`);
     setGpsLoading(true);
     
     // Timeout wrapper with retry logic
     const timeoutId = setTimeout(() => {
       setGpsLoading(false);
       if (retryCount < 1) {
+        console.warn("⏱️ GPS timeout on attempt 1, retrying...");
         showToast("⏱️ GPS timeout. Retrying...");
-        setTimeout(() => detectGPS(retryCount + 1), 500); // Retry once
+        setTimeout(() => detectGPS(retryCount + 1), 1000); // Retry once with longer delay
       } else {
-        showToast("⏱️ Location request timed out. Please enable location access and try again.");
+        console.error("❌ GPS timeout on attempt 2 - giving up");
+        showToast("⏱️ Location timeout. Please check permissions in Settings or try again.");
       }
-    }, 12000);
+    }, 15000);
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         clearTimeout(timeoutId);
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
         
-        // Log accuracy for debugging
-        console.log(`📍 GPS: ${lat}, ${lng} (accuracy: ${accuracy}m)`);
+        console.log(`✅ GPS acquired: ${lat}, ${lng} (accuracy: ${accuracy}m)`);
         
         try {
           const r = await fetch(
@@ -637,12 +641,13 @@ const UserPage = () => {
           const data = await r.json();
           const address = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
           const short = address.split(",").slice(0, 3).join(",").trim();
+          console.log(`📍 Geocoded address: ${short}`);
           setPickup({ lat, lng, address: short });
           showToast("✅ Location detected successfully!");
         } catch (geocodeErr) {
-          console.warn("Geocoding failed, using coordinates:", geocodeErr);
+          console.warn("⚠️ Geocoding failed:", geocodeErr.message);
           setPickup({ lat, lng, address: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
-          showToast("📍 Using GPS coordinates. Address unavailable, but location is accurate.");
+          showToast("📍 GPS detected! Address lookup failed, using coordinates.");
         }
         setGpsLoading(false);
       },
@@ -652,17 +657,17 @@ const UserPage = () => {
         
         // Detailed error messages with action steps
         const errorMessages = {
-          1: "❌ Permission Denied\nPlease enable location access in Settings → Privacy → Location and select 'Always'",
-          2: "⚠️ Position Unavailable\nYour device cannot detect GPS. Try going outside or try again.",
-          3: "⏱️ GPS Timeout\nLocation is taking too long. Try selecting location manually or disable location history.",
+          1: "❌ Location Permission Denied\nPlease:\n1. Check your browser address bar\n2. Click the location icon next to URL\n3. Select 'Allow' or 'Allow always'\n4. Reload the page and try again",
+          2: "⚠️ Position Unavailable\nYour device cannot detect GPS signal.\n• Try going outside\n• Wait a moment and try again\n• Or select location manually",
+          3: "⏱️ GPS Timeout\nLocation is taking too long.\n• Try refreshing the page\n• Or select location manually",
         };
         
-        const message = errorMessages[err.code] || "❌ Could not fetch location. Please try again or select manually.";
+        const message = errorMessages[err.code] || `❌ Location error (Code: ${err.code}). Try selecting manually.`;
         showToast(message);
-        console.error("Geolocation error code:", err.code, "message:", err.message);
+        console.error("❌ Geolocation error:", {code: err.code, message: err.message});
       },
       { 
-        timeout: 10000,      // Wait 10 seconds for response
+        timeout: 13000,      // Wait 13 seconds for response
         maximumAge: 0,       // Don't use cached position - get fresh GPS
         enableHighAccuracy: true 
       }

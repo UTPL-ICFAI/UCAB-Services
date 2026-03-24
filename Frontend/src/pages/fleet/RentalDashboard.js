@@ -110,6 +110,8 @@ export default function RentalDashboard() {
                             <StatCard label="Available" value={available} icon="✅" />
                             <StatCard label="Booked Out" value={vehicles.length - available} icon="📋" />
                             <StatCard label="Pending Requests" value={pendingBookings.length} icon="⏳" color="#f6ad55" />
+                            <StatCard label="Completed Bookings" value={bookings.filter(b => b.status === 'completed').length} icon="💚" color="#00d084" />
+                            <StatCard label="Total Earnings" value={`₹${bookings.filter(b => b.status === 'completed').reduce((sum, b) => sum + (b.total_amount || 0), 0)}`} icon="💰" color="#ffd700" />
                         </div>
                         <div style={{ marginTop: 24 }}>
                             <h3 style={{ color: "#fff", margin: "0 0 12px" }}>📋 Recent Bookings</h3>
