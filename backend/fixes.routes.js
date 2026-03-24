@@ -7,6 +7,48 @@ const express = require("express");
 const pool = require("./config/db");
 const router = express.Router();
 
+// ── Create Demo Rental Account ─────────────────────────────────
+// POST /api/fixes/create-demo-rental - Create demo rental owner account
+router.post("/create-demo-rental", async (req, res) => {
+    try {
+        const email = 'rentalowner@demo.com';
+        const password = 'demo';
+        
+        // Check if already exists
+        const existing = await pool.query(
+            'SELECT id, email FROM fleet_owners WHERE email = $1',
+            [email]
+        );
+        
+        if (existing.rows.length > 0) {
+            return res.json({
+                message: "Demo rental account already exists",
+                email: existing.rows[0].email,
+                password: "demo"
+            });
+        }
+        
+        // Create demo rental owner
+        const result = await pool.query(
+            `INSERT INTO fleet_owners (owner_name, email, password, company_name, phone, city, wallet_balance, is_verified)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             RETURNING id, email, owner_name, company_name`,
+            ['Demo Rental Owner', email, password, 'Demo Rentals Inc', '+91-9999999999', 'Bangalore', 5000, true]
+        );
+        
+        res.json({
+            message: "✅ Demo rental account created successfully!",
+            email: result.rows[0].email,
+            password: "demo",
+            owner_id: result.rows[0].id,
+            wallet_balance: 5000
+        });
+    } catch (err) {
+        console.error("Create demo rental error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ── Support Team Database Access ─────────────────────────────────
 // GET /api/fixes/support-stats - Support team can view critical database stats
 router.get("/support-stats", async (req, res) => {
