@@ -5,7 +5,7 @@
  */
 
 const express = require("express");
-const pool = require("../config/db");
+const pool = require("./config/db");
 const router = express.Router();
 
 // ── POST /api/test-data/seed-rental-vehicles ─────────────────────
