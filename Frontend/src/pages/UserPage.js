@@ -337,6 +337,91 @@ const UserPage = () => {
   }, [tkn]);
 
   /* ─── Auto-detect GPS location on component mount ────────────── */
+  // GPS auto-detect pickup with PROPER implementation for production
+  const detectGPS = (retryCount = 0) => {
+    if (!navigator.geolocation) {
+      showToast("❌ Geolocation not available in your browser.\n• Check if you're using HTTPS\n• Try a different browser");
+      console.error("Geolocation API not available");
+      return;
+    }
+
+    console.log(`🔍 GPS Detection Attempt ${retryCount + 1}/2...`);
+    setGpsLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        // SUCCESS: GPS location acquired
+        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+        console.log(`✅ GPS SUCCESS: ${lat}, ${lng} (accuracy: ${accuracy}m)`);
+
+        try {
+          // Try to get address from coordinates
+          const r = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&timeout=5`,
+            { headers: { "Accept-Language": "en" } }
+          );
+
+          if (r.ok) {
+            const data = await r.json();
+            const address = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            const short = address.split(",").slice(0, 3).join(",").trim();
+            console.log(`📍 Address: ${short}`);
+            setPickup({ lat, lng, address: short });
+            showToast("✅ Location detected successfully!");
+          } else {
+            throw new Error("Geocoding service unavailable");
+          }
+        } catch (geocodeErr) {
+          // Geocoding failed, use coordinates only
+          console.warn("⚠️ Geocoding failed:", geocodeErr.message);
+          setPickup({ lat, lng, address: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
+          showToast("✅ GPS detected! Using coordinates (address lookup failed)");
+        }
+        setGpsLoading(false);
+      },
+      (err) => {
+        // ERROR: GPS detection failed
+        console.error(`❌ GPS ERROR Code ${err.code}:`, err.message);
+        setGpsLoading(false);
+
+        if (retryCount < 1) {
+          console.log("🔄 Retrying GPS detection...");
+          showToast("⏳ Retrying GPS...");
+          setTimeout(() => detectGPS(retryCount + 1), 1500);
+          return;
+        }
+
+        // Detailed error messages
+        const errorDetails = {
+          1: {
+            title: "❌ Location Permission Denied",
+            message: "Please enable location access:\n1. Click the location icon in your address bar\n2. Select 'Allow' or 'Always Allow'\n3. Refresh page and try again\n\nOr select location manually below."
+          },
+          2: {
+            title: "⚠️ GPS Not Available",
+            message: "Your device cannot detect GPS right now:\n• Make sure location services are enabled\n• Try going outside\n• Try again in a moment\n\nOr select location manually below."
+          },
+          3: {
+            title: "⏱️ GPS Timeout",
+            message: "Location detection took too long:\n• Make sure location is enabled\n• Try refreshing the page\n• Or select location manually below"
+          }
+        };
+
+        const details = errorDetails[err.code] || {
+          title: "❌ Location Detection Failed",
+          message: "Could not detect your location.\nPlease select location manually below."
+        };
+
+        showToast(`${details.title}\n${details.message}`);
+      },
+      {
+        timeout: 15000, // 15 seconds timeout
+        maximumAge: 0, // Fresh GPS only
+        enableHighAccuracy: true
+      }
+    );
+  };
+
   useEffect(() => {
     // Automatically detect user location when page loads
     detectGPS(0);
@@ -435,6 +520,14 @@ const UserPage = () => {
       showToast("🏁 Trip completed! Please rate your captain.");
     });
 
+    socket.on("wallet:insufficient", ({ balance, fare, shortfall, message }) => {
+      showToast(`⚠️ ${message || `Insufficient wallet balance. Need ₹${shortfall} more.`}`);
+    });
+
+    socket.on("wallet:updated", ({ balance }) => {
+      setWalletBalance(balance);
+    });
+
     socket.on("ride error", ({ message }) => {
       setRideStatus("idle");
       showToast(`❌ ${message}`);
@@ -444,6 +537,8 @@ const UserPage = () => {
       socket.off("ride requested");
       socket.off("ride accepted");
       socket.off("ride completed");
+      socket.off("wallet:insufficient");
+      socket.off("wallet:updated");
       socket.off("ride error");
     };
   }, [pickup, socket]);
@@ -599,92 +694,7 @@ const UserPage = () => {
     }
   };
 
-  /* ─── P0 Helpers ─────────────────────────────────────────── */
-
-  // GPS auto-detect pickup with PROPER implementation for production
-  const detectGPS = (retryCount = 0) => {
-    if (!navigator.geolocation) { 
-      showToast("❌ Geolocation not available in your browser.\n• Check if you're using HTTPS\n• Try a different browser"); 
-      console.error("Geolocation API not available");
-      return; 
-    }
-    
-    console.log(`🔍 GPS Detection Attempt ${retryCount + 1}/2...`);
-    setGpsLoading(true);
-    
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        // SUCCESS: GPS location acquired
-        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-        console.log(`✅ GPS SUCCESS: ${lat}, ${lng} (accuracy: ${accuracy}m)`);
-        
-        try {
-          // Try to get address from coordinates
-          const r = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&timeout=5`,
-            { headers: { "Accept-Language": "en" } }
-          );
-          
-          if (r.ok) {
-            const data = await r.json();
-            const address = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-            const short = address.split(",").slice(0, 3).join(",").trim();
-            console.log(`📍 Address: ${short}`);
-            setPickup({ lat, lng, address: short });
-            showToast("✅ Location detected successfully!");
-          } else {
-            throw new Error("Geocoding service unavailable");
-          }
-        } catch (geocodeErr) {
-          // Geocoding failed, use coordinates only
-          console.warn("⚠️ Geocoding failed:", geocodeErr.message);
-          setPickup({ lat, lng, address: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
-          showToast("✅ GPS detected! Using coordinates (address lookup failed)");
-        }
-        setGpsLoading(false);
-      },
-      (err) => {
-        // ERROR: GPS detection failed
-        console.error(`❌ GPS ERROR Code ${err.code}:`, err.message);
-        setGpsLoading(false);
-        
-        if (retryCount < 1) {
-          console.log("🔄 Retrying GPS detection...");
-          showToast("⏳ Retrying GPS...");
-          setTimeout(() => detectGPS(retryCount + 1), 1500);
-          return;
-        }
-        
-        // Detailed error messages
-        const errorDetails = {
-          1: {
-            title: "❌ Location Permission Denied",
-            message: "Please enable location access:\n1. Click the location icon in your address bar\n2. Select 'Allow' or 'Always Allow'\n3. Refresh page and try again\n\nOr select location manually below."
-          },
-          2: {
-            title: "⚠️ GPS Not Available",
-            message: "Your device cannot detect GPS right now:\n• Make sure location services are enabled\n• Try going outside\n• Try again in a moment\n\nOr select location manually below."
-          },
-          3: {
-            title: "⏱️ GPS Timeout",
-            message: "Location detection took too long:\n• Make sure location is enabled\n• Try refreshing the page\n• Or select location manually below"
-          }
-        };
-        
-        const details = errorDetails[err.code] || {
-          title: "❌ Location Detection Failed",
-          message: "Could not detect your location.\nPlease select location manually below."
-        };
-        
-        showToast(`${details.title}\n${details.message}`);
-      },
-      { 
-        timeout: 15000,      // 15 seconds timeout
-        maximumAge: 0,       // Fresh GPS only
-        enableHighAccuracy: true 
-      }
-    );
-  };
+/* ─── P0 Helpers ─────────────────────────────────────────── */
 
   // Save a search to localStorage recent history
   const saveRecentSearch = (location) => {
@@ -772,43 +782,55 @@ const UserPage = () => {
   // Store last ride params so tip re-emit can re-use them
   const lastRideParamsRef = useRef(null);
 
-  const requestRide = () => {
+const requestRide = () => {
     if (!pickup || !dropoff) { showToast("⚠️ Please set pickup & dropoff"); return; }
     if (bookingMode === "schedule" && (!schedDate || !schedTime)) {
       showToast("⚠️ Please set schedule date & time"); return;
     }
+
+    const effectiveFare = Math.max(10, fare - promoDiscount);
+
+    // ── WALLET BALANCE CHECK ──────────────────────────────────
+    if (useWallet) {
+      if (walletBalance < effectiveFare) {
+        const shortfall = effectiveFare - walletBalance;
+        showToast(`⚠️ Insufficient wallet balance!\nNeed ₹${shortfall} more.\nAdd money or use Cash/UPI.`);
+        return;
+      }
+    }
+
     const scheduledAt = bookingMode === "schedule"
       ? new Date(`${schedDate}T${schedTime}`).toISOString()
       : bookingMode === "arrival" && departureResult
         ? departureResult.depart.toISOString()
         : null;
 
-    const effectiveFare = Math.max(10, fare - promoDiscount);
     const params = {
       pickup: { ...pickup }, dropoff: { ...dropoff },
       fare: effectiveFare, distKm: routeInfo?.distKm || 5,
       duration: routeInfo?.durationMin || 15,
-      rideType: rideType.id, paymentMethod: useWallet ? "wallet" : payMethod, scheduledAt,
+      rideType: rideType.id, paymentMethod: useWallet ? "wallet" : payMethod,
+      scheduledAt,
       userId: user._id || null,
-    };
-    // Store BOTH the params and the original base fare separately
-    lastRideParamsRef.current = { ...params, _baseFare: effectiveFare };
-    setTipAmount(0);
-    setDisplayFare(effectiveFare);
-    setBidStatus(null);
+};
+  // Store BOTH the params and the original base fare separately
+  lastRideParamsRef.current = { ...params, _baseFare: effectiveFare };
+  setTipAmount(0);
+  setDisplayFare(effectiveFare);
+  setBidStatus(null);
 
-    socket.emit("new ride request", params);
-    if (scheduledAt) {
-      setSchedConfirmed(true);
-      showToast(`📅 Scheduled for ${fmtTime(new Date(scheduledAt))}`);
-    } else {
-      setRideStatus("searching");
-      setSheetH(PEEK);
-      showToast("🔍 Finding your captain...");
-    }
-  };
+  socket.emit("new ride request", params);
+  if (scheduledAt) {
+    setSchedConfirmed(true);
+    showToast(`📅 Scheduled for ${fmtTime(new Date(scheduledAt))}`);
+  } else {
+    setRideStatus("searching");
+    setSheetH(PEEK);
+    showToast("🔍 Finding your captain...");
+  }
+};
 
-  /* ─── Apply tip (re-emit ride request with updated fare) ──── */
+/* ─── Apply tip (re-emit ride request with updated fare) ──── */
   const applyTip = (newTip) => {
     if (!lastRideParamsRef.current) return;
     // Always compute from the original base fare to prevent accumulation
@@ -1025,10 +1047,18 @@ const UserPage = () => {
                     <span>{p.icon}</span> {p.label}
                   </div>
                 ))}
-                <div className={`pay-method-card ${useWallet ? "selected" : ""}`}
-                  onClick={() => setUseWallet((v) => !v)}>
-                  <span>👛</span> Wallet {walletBalance > 0 && <span style={{ fontSize: 10, color: "#1db954" }}>₹{walletBalance.toFixed(0)}</span>}
-                </div>
+<div className={`pay-method-card ${useWallet ? "selected" : ""}`}
+          onClick={() => {
+            if (walletBalance < Math.max(10, fare - promoDiscount)) {
+              showToast(`⚠️ Wallet balance (₹${walletBalance.toFixed(0)}) is less than fare.\nAdd money or use Cash/UPI.`);
+            }
+            setUseWallet((v) => !v);
+          }}>
+          <span>👛</span> Wallet {walletBalance > 0 && <span style={{ fontSize: 10, color: "#1db954" }}>₹{walletBalance.toFixed(0)}</span>}
+          {walletBalance < Math.max(10, fare - promoDiscount) && walletBalance > 0 && (
+            <span style={{ fontSize: 9, color: "#e53935", marginLeft: 4 }}>⚠️ Low</span>
+          )}
+        </div>
               </div>
               <div className="drawer-section-title">Cancellation Policy</div>
               <div className="cancel-policy-box">

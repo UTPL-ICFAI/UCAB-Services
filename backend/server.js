@@ -507,108 +507,123 @@ io.on("connection", (socket) => {
         if (captainSocketId) io.to(captainSocketId).emit("captain:receive_otp", { otp, rideId });
     });
 
-    // ── Captain completes ride ───────────────────────────────
-    socket.on("complete ride", async ({ rideId, captainId, fare }) => {
-        try {
-            const ride = await Ride.findById(rideId).catch(() => null);
-            
-            await Ride.findByIdAndUpdate(rideId, { status: "completed" });
+// ── Captain completes ride ───────────────────────────────
+  socket.on("complete ride", async ({ rideId, captainId, fare }) => {
+    try {
+      const ride = await Ride.findById(rideId).catch(() => null);
 
-            if (captainId) {
-                const updated = await Captain.findByIdAndUpdate(
-                    captainId,
-                    { $inc: { earnings: fare || 0, totalRides: 1 } },
-                    { new: true }
-                );
-                if (updated) {
-                    const statsPayload = { earnings: updated.earnings, totalRides: updated.totalRides };
-                    // Push to ALL captain devices
-                    io.to(`captain:${captainId}`).emit("stats updated", statsPayload);
-                    socket.emit("stats updated", statsPayload);
-                }
-            }
+      await Ride.findByIdAndUpdate(rideId, { status: "completed" });
 
-            // ──── NEW: Transfer fare from rider wallet to captain wallet ────
-            if (ride?.riderId && captainId && (fare || 0) > 0) {
-                try {
-                    console.log(`💳 Starting wallet transfer: Rider ${ride.riderId}, Captain ${captainId}, Fare ₹${fare}`);
-                    
-                    // Check rider's current wallet balance
-                    const riderWallet = await pool.query("SELECT wallet_balance FROM users WHERE id = $1", [ride.riderId]);
-                    console.log(`👤 Rider wallet before: ₹${riderWallet.rows[0]?.wallet_balance || 0}`);
-                    
-                    // Deduct from rider wallet
-                    const deductRes = await pool.query(
-                        "UPDATE users SET wallet_balance = GREATEST(wallet_balance - $1, 0) WHERE id = $2 RETURNING wallet_balance",
-                        [fare, ride.riderId]
-                    );
-                    console.log(`👤 Rider wallet after deduct: ₹${deductRes.rows[0]?.wallet_balance || 0}`);
-                    
-                    // Add to captain wallet
-                    const captainRes = await pool.query(
-                        "UPDATE captains SET wallet_balance = COALESCE(wallet_balance, 0) + $1 WHERE id = $2 RETURNING wallet_balance",
-                        [fare, captainId]
-                    );
-                    console.log(`🚕 Captain wallet after credit: ₹${captainRes.rows[0]?.wallet_balance || 0}`);
-                    
-                    // Log wallet transactions for both parties
-                    await Promise.all([
-                        pool.query(
-                            "INSERT INTO wallet_transactions (user_id, type, amount, description, created_at) VALUES ($1, $2, $3, $4, NOW())",
-                            [ride.riderId, "debit", fare, `Ride completed - Fare paid to ${ride.captain_name || "Captain"} (Ride #${rideId})`]
-                        ),
-                        pool.query(
-                            "INSERT INTO captain_wallet_transactions (captain_id, type, amount, description, created_at) VALUES ($1, $2, $3, $4, NOW())",
-                            [captainId, "credit", fare, `Ride completed - Fare received from rider (Ride #${rideId})`]
-                        )
-                    ]).catch(logErr => console.error("Transaction logging error:", logErr.message));
-                    
-                    console.log(`✅ Wallet transfer complete: ₹${fare} from rider ${ride.riderId} to captain ${captainId}`);
-                    
-                    // Emit wallet update events to both parties
-                    if (deductRes.rows[0]) {
-                        io.to(`user:${ride.riderId}`).emit("wallet:updated", { 
-                            balance: deductRes.rows[0].wallet_balance,
-                            lastTransaction: {type: "debit", amount: fare, description: "Ride fare payment"}
-                        });
-                    }
-                    if (captainRes.rows[0]) {
-                        io.to(`captain:${captainId}`).emit("wallet:updated", { 
-                            balance: captainRes.rows[0].wallet_balance,
-                            lastTransaction: {type: "credit", amount: fare, description: "Ride fare received"}
-                        });
-                    }
-                } catch (walletErr) {
-                    console.error("❌ Wallet transfer error:", walletErr.message);
-                    console.error("Ride data:", {riderId: ride?.riderId, captainId, fare});
-                }
-            } else {
-                console.log("⚠️  Wallet transfer skipped:", {
-                    hasRiderId: !!ride?.riderId,
-                    hasCaptainId: !!captainId,
-                    fare: fare || 0,
-                    fareCheck: (fare || 0) > 0
-                });
-            }
-
-            // Award loyalty points to rider: 1 point per ₹10 spent (min 1 point)
-            if (ride?.riderId) {
-                const points = Math.max(1, Math.floor((fare || 0) / 10));
-                pool.query(
-                    "UPDATE users SET loyalty_points = loyalty_points + $1 WHERE id = $2",
-                    [points, ride.riderId]
-                ).catch(() => {});
-                io.to(`user:${ride.riderId}`).emit("loyalty:points_earned", { points, rideId });
-                io.to(`user:${ride.riderId}`).emit("ride completed", { rideId });
-            }
-            io.emit("ride completed", { rideId });
-            console.log(`🏁 Ride ${rideId} completed`);
-        } catch (err) {
-            console.error("complete ride error:", err);
+      if (captainId) {
+        const updated = await Captain.findByIdAndUpdate(
+          captainId,
+          { $inc: { earnings: fare || 0, totalRides: 1 } },
+          { new: true }
+        );
+        if (updated) {
+          const statsPayload = { earnings: updated.earnings, totalRides: updated.totalRides };
+          // Push to ALL captain devices
+          io.to(`captain:${captainId}`).emit("stats updated", statsPayload);
+          socket.emit("stats updated", statsPayload);
         }
-    });
+      }
 
-    socket.on("sos alert", async (data) => {
+      // ──── Transfer fare from rider wallet to captain wallet (ONLY if payment method is "wallet") ────
+      const isWalletPayment = ride?.paymentMethod === "wallet";
+      if (isWalletPayment && ride?.riderId && captainId && (fare || 0) > 0) {
+        try {
+          console.log(`💳 Starting wallet transfer: Rider ${ride.riderId}, Captain ${captainId}, Fare ₹${fare}`);
+
+          // Check rider's current wallet balance
+          const riderWallet = await pool.query("SELECT wallet_balance FROM users WHERE id = $1", [ride.riderId]);
+          const riderBalance = parseFloat(riderWallet.rows[0]?.wallet_balance) || 0;
+          console.log(`👤 Rider wallet before: ₹${riderBalance}`);
+
+          // If insufficient balance, log warning but don't block - captain collects cash
+          if (riderBalance < fare) {
+            console.warn(`⚠️ Insufficient wallet balance: ₹${riderBalance} < ₹${fare}. Captain should collect cash.`);
+            io.to(`user:${ride.riderId}`).emit("wallet:insufficient", {
+              balance: riderBalance,
+              fare: fare,
+              shortfall: fare - riderBalance,
+              message: `Insufficient wallet balance. Please pay ₹${fare} in cash to captain.`
+            });
+          } else {
+            // Deduct from rider wallet
+            const deductRes = await pool.query(
+              "UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2 RETURNING wallet_balance",
+              [fare, ride.riderId]
+            );
+            console.log(`👤 Rider wallet after deduct: ₹${deductRes.rows[0]?.wallet_balance || 0}`);
+
+            // Add to captain wallet
+            const captainRes = await pool.query(
+              "UPDATE captains SET wallet_balance = COALESCE(wallet_balance, 0) + $1 WHERE id = $2 RETURNING wallet_balance",
+              [fare, captainId]
+            );
+            console.log(`🚕 Captain wallet after credit: ₹${captainRes.rows[0]?.wallet_balance || 0}`);
+
+            // Log wallet transactions for both parties
+            await Promise.all([
+              pool.query(
+                "INSERT INTO wallet_transactions (user_id, type, amount, description, created_at) VALUES ($1, $2, $3, $4, NOW())",
+                [ride.riderId, "debit", fare, `Ride completed - Fare paid to Captain (Ride #${rideId})`]
+              ),
+              pool.query(
+                "INSERT INTO captain_wallet_transactions (captain_id, type, amount, description, created_at) VALUES ($1, $2, $3, $4, NOW())",
+                [captainId, "credit", fare, `Ride completed - Fare received from rider (Ride #${rideId})`]
+              )
+            ]).catch(logErr => console.error("Transaction logging error:", logErr.message));
+
+            console.log(`✅ Wallet transfer complete: ₹${fare} from rider ${ride.riderId} to captain ${captainId}`);
+
+            // Emit wallet update events to both parties
+            if (deductRes.rows[0]) {
+              io.to(`user:${ride.riderId}`).emit("wallet:updated", {
+                balance: deductRes.rows[0].wallet_balance,
+                lastTransaction: {type: "debit", amount: fare, description: "Ride fare payment"}
+              });
+            }
+            if (captainRes.rows[0]) {
+              io.to(`captain:${captainId}`).emit("wallet:updated", {
+                balance: captainRes.rows[0].wallet_balance,
+                lastTransaction: {type: "credit", amount: fare, description: "Ride fare received"}
+              });
+            }
+          }
+        } catch (walletErr) {
+          console.error("❌ Wallet transfer error:", walletErr.message);
+          console.error("Ride data:", {riderId: ride?.riderId, captainId, fare});
+        }
+      } else if (!isWalletPayment) {
+        console.log(`💵 Cash/UPI payment - no wallet transfer needed for ride ${rideId}`);
+      } else {
+        console.log("⚠️ Wallet transfer skipped:", {
+          hasRiderId: !!ride?.riderId,
+          hasCaptainId: !!captainId,
+          fare: fare || 0,
+          fareCheck: (fare || 0) > 0
+        });
+      }
+
+// Award loyalty points to rider: 1 point per ₹10 spent (min 1 point)
+      if (ride?.riderId) {
+        const points = Math.max(1, Math.floor((fare || 0) / 10));
+        pool.query(
+          "UPDATE users SET loyalty_points = loyalty_points + $1 WHERE id = $2",
+          [points, ride.riderId]
+        ).catch(() => {});
+        io.to(`user:${ride.riderId}`).emit("loyalty:points_earned", { points, rideId });
+        io.to(`user:${ride.riderId}`).emit("ride completed", { rideId });
+      }
+      io.emit("ride completed", { rideId });
+      console.log(`🏁 Ride ${rideId} completed`);
+    } catch (err) {
+      console.error("complete ride error:", err);
+    }
+  });
+
+  socket.on("sos alert", async (data) => {
         console.warn(`🚨 SOS ALERT from Ride [${data.rideId}]: Rider feels unsafe!`);
         // Persist to DB
         try {
