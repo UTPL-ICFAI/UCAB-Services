@@ -312,7 +312,7 @@ export default function CarpoolPage() {
                 <div style={{ color: COLORS.textSecondary, fontSize: 16 }}>No rides available now.</div>
               </div>
             ) : (
-              rides.map((ride) => {
+              rides.filter(ride => ride.status !== 'completed' && ride.status !== 'cancelled' && !ride.ended).map((ride) => {
                 const canBook = ride.availableSeats > 0 && !ride.started && new Date(ride.departureTime) > new Date();
                 return (
                   <div key={ride.id} style={{
@@ -468,7 +468,7 @@ export default function CarpoolPage() {
                 <div style={{ color: COLORS.textSecondary, fontSize: 16 }}>No rides posted yet.</div>
               </div>
             ) : (
-              myRides.map((ride) => (
+              myRides.filter(ride => ride.status !== 'completed' && ride.status !== 'cancelled' && !ride.ended).map((ride) => (
                 <div key={ride.id} style={{ background: `linear-gradient(135deg, rgba(111,66,193,0.15), rgba(0,208,132,0.08))`, border: `1.5px solid ${COLORS.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                     <div style={{ flex: 1 }}>
