@@ -328,11 +328,12 @@ const CaptainPage = () => {
     showToast("✅ Ride accepted! Head to pickup.");
     // Begin broadcasting location to rider for ETA
     clearInterval(locationIntervalRef.current);
+    
+    // Request location permission and start tracking
     if (navigator.geolocation) {
-      // Request permission first and start broadcasting
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          // Permission granted - start location broadcast
+          // Permission granted, start tracking
           locationIntervalRef.current = setInterval(() => {
             navigator.geolocation.getCurrentPosition((pos) => {
               socket.emit("captain:location", {
@@ -341,10 +342,10 @@ const CaptainPage = () => {
                 lng: pos.coords.longitude,
               });
             }, (err) => {
-              console.warn("Location update failed:", err.message);
-            });
+              console.warn("Location access error:", err.message);
+            }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
           }, 5000);
-          // Send first location immediately
+          // Send initial location
           socket.emit("captain:location", {
             rideId: ride.rideId,
             lat: pos.coords.latitude,
@@ -353,17 +354,14 @@ const CaptainPage = () => {
         },
         (err) => {
           // Permission denied or error
-          if (err.code === 1) {
-            showToast("❌ Location permission denied. Please allow location access to share your location with the rider.");
-          } else if (err.code === 2) {
-            showToast("❌ Location unavailable. Please check your device settings.");
-          } else if (err.code === 3) {
-            showToast("❌ Location request timed out. Please try again.");
-          }
+          const errorMsg = err.code === 1 ? "Location permission denied" : err.code === 2 ? "Location unavailable" : "Location request timeout";
+          showToast(`❌ ${errorMsg}`);
           console.error("Geolocation error:", err.message);
         },
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
+    } else {
+      showToast("❌ Geolocation not supported on this device");
     }
   };
 
@@ -380,13 +378,8 @@ const CaptainPage = () => {
     if (amt > walletBalance) { setWithdrawMsg("Insufficient wallet balance"); return; }
     axios.post(`${BACKEND_URL}/api/wallet/withdrawal-request`, { amount: amt }, { headers: { Authorization: `Bearer ${tkn}` } })
       .then((res) => {
-        // Refetch wallet balance to get the updated amount
-        axios.get(`${BACKEND_URL}/api/wallet/captain-balance`, { headers: { Authorization: `Bearer ${tkn}` } })
-          .then((res) => {
-            setWalletBalance(res.data.balance || 0);
-            setWalletTxns(res.data.transactions || []);
-          })
-          .catch(() => {});
+        setWalletBalance(res.data.newBalance || 0);
+        setWalletTxns((prev) => [{ type: "withdrawal_request", amount: amt, description: "Withdrawal request", created_at: new Date().toISOString() }, ...prev]);
         setWithdrawAmt("");
         setWithdrawMsg("✅ Withdrawal request submitted!");
         showToast("✅ Withdrawal request submitted");

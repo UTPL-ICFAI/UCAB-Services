@@ -93,7 +93,12 @@ export default function CarpoolPage() {
   const fetchRides = useCallback(() => {
     setLoading(true);
     axios.get(`${BACKEND_URL}/api/carpool`, AUTH)
-      .then((r) => setRides(Array.isArray(r.data) ? r.data : (r.data?.carpools || r.data?.rides || [])))
+      .then((r) => {
+        const allRides = Array.isArray(r.data) ? r.data : (r.data?.carpools || r.data?.rides || []);
+        // Filter to show only active rides, hide completed/cancelled
+        const activeRides = allRides.filter(ride => ride.status === 'active' && ride.availableSeats > 0);
+        setRides(activeRides);
+      })
       .catch(() => setRides([]))
       .finally(() => setLoading(false));
   }, []);
@@ -312,7 +317,7 @@ export default function CarpoolPage() {
                 <div style={{ color: COLORS.textSecondary, fontSize: 16 }}>No rides available now.</div>
               </div>
             ) : (
-              rides.filter(ride => ride.status !== 'completed' && ride.status !== 'cancelled' && !ride.ended).map((ride) => {
+              rides.map((ride) => {
                 const canBook = ride.availableSeats > 0 && !ride.started && new Date(ride.departureTime) > new Date();
                 return (
                   <div key={ride.id} style={{
@@ -468,7 +473,7 @@ export default function CarpoolPage() {
                 <div style={{ color: COLORS.textSecondary, fontSize: 16 }}>No rides posted yet.</div>
               </div>
             ) : (
-              myRides.filter(ride => ride.status !== 'completed' && ride.status !== 'cancelled' && !ride.ended).map((ride) => (
+              myRides.map((ride) => (
                 <div key={ride.id} style={{ background: `linear-gradient(135deg, rgba(111,66,193,0.15), rgba(0,208,132,0.08))`, border: `1.5px solid ${COLORS.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                     <div style={{ flex: 1 }}>

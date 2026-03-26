@@ -159,16 +159,21 @@ router.post("/withdrawal-request", auth, async (req, res) => {
         if (parseFloat(rows[0].wallet_balance) < amount)
             return res.status(400).json({ message: "Insufficient wallet balance" });
 
-        await pool.query(
-            "UPDATE captains SET wallet_balance = wallet_balance - $1 WHERE id = $2",
+        const updateRes = await pool.query(
+            "UPDATE captains SET wallet_balance = wallet_balance - $1 WHERE id = $2 RETURNING wallet_balance",
             [amount, captainId]
         );
+        const newBalance = updateRes.rows[0]?.wallet_balance || 0;
+        
         await pool.query(
             `INSERT INTO wallet_transactions (captain_id, type, amount, description)
              VALUES ($1, 'withdrawal_request', $2, 'Withdrawal request submitted')`,
             [captainId, amount]
         );
-        res.json({ message: `₹${amount} withdrawal request submitted. Will be processed in 1–2 business days.` });
+        res.json({ 
+            message: `₹${amount} withdrawal request submitted. Will be processed in 1–2 business days.`,
+            newBalance: parseFloat(newBalance)
+        });
     } catch (err) {
         console.error("withdrawal-request error:", err.message);
         res.status(500).json({ message: "Server error" });
