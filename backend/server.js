@@ -96,6 +96,7 @@ app.use("/api/support-team", supportTeamRoutes);
 app.use("/api/test-data", testDataRoutes);
 app.use("/api/fixes", fixesRoutes);
 app.use("/api/sos", sosRoutes);
+app.get("/", (_req, res) => res.send("UCAB API Server is running. Access /health for status."));
 app.get("/health", (_req, res) => res.json({ status: "ok", time: new Date() }));
 
 // ── In-memory: last known captain location per rideId (for tracking) ────────
