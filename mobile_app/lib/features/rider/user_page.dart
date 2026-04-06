@@ -72,6 +72,11 @@ class _UserPageState extends ConsumerState<UserPage> {
   double _surgeMultiplier = 1.0;
   String? _currentRideId;
 
+  // Search state
+  Timer? _searchDebounce;
+  List<Map<String, dynamic>> _locationSuggestions = [];
+  bool _isSearchingPickup = true;
+
   // Accepted ride info
   String _rideOtp = '';
   String _captainName = '';
@@ -101,6 +106,7 @@ class _UserPageState extends ConsumerState<UserPage> {
     _pickupCtrl.dispose();
     _dropoffCtrl.dispose();
     _toastTimer?.cancel();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
@@ -327,49 +333,23 @@ class _UserPageState extends ConsumerState<UserPage> {
 
   // ─── Search Location ──────────────────────────────────────────
   Future<void> _searchLocation(String query, bool isPickup) async {
-    if (query.length < 3) return;
+    if (query.trim().length < 3) {
+      if (mounted) setState(() => _locationSuggestions = []);
+      return;
+    }
     try {
       final resp = await ApiClient().dio.get(
         'https://nominatim.openstreetmap.org/search',
-        queryParameters: {'q': query, 'format': 'json', 'limit': 5},
+        queryParameters: {'q': query.trim(), 'format': 'json', 'limit': 5},
         options: Options(headers: {'Accept-Language': 'en'}),
       );
-      if ((resp.data as List).isNotEmpty && mounted) {
-        _showLocationPicker(resp.data as List, isPickup);
+      if (mounted) {
+        setState(() {
+          _locationSuggestions = List<Map<String, dynamic>>.from(resp.data as List);
+          _isSearchingPickup = isPickup;
+        });
       }
     } catch (_) {}
-  }
-
-  void _showLocationPicker(List results, bool isPickup) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.bgSecondary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => ListView.builder(
-        shrinkWrap: true,
-        padding: const EdgeInsets.all(16),
-        itemCount: results.length,
-        itemBuilder: (_, i) {
-          final r = results[i];
-          final name = r['display_name'] ?? '';
-          final short = name.split(',').take(3).join(',').trim();
-          return ListTile(
-            leading: Icon(isPickup ? Icons.trip_origin : Icons.location_on, color: isPickup ? AppColors.secondary : AppColors.danger, size: 20),
-            title: Text(short, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary), maxLines: 2, overflow: TextOverflow.ellipsis),
-            onTap: () {
-              final lat = double.parse(r['lat']);
-              final lng = double.parse(r['lon']);
-              final loc = _Location(lat: lat, lng: lng, address: short);
-              setState(() {
-                if (isPickup) { _pickup = loc; _pickupCtrl.text = short; } else { _dropoff = loc; _dropoffCtrl.text = short; }
-              });
-              _mapController.move(LatLng(lat, lng), 14);
-              Navigator.pop(context);
-            },
-          );
-        },
-      ),
-    );
   }
 
   static double _parseD(dynamic v, double f) {
@@ -399,6 +379,7 @@ class _UserPageState extends ConsumerState<UserPage> {
               TileLayer(
                 urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
                 subdomains: const ['a', 'b', 'c', 'd'],
+                retinaMode: true, 
               ),
               MarkerLayer(markers: [
                 if (_pickup != null)
@@ -514,96 +495,129 @@ class _UserPageState extends ConsumerState<UserPage> {
         ]),
       ),
 
-      // Distance display
-      if (_pickup != null && _dropoff != null) ...[
-        const SizedBox(height: 8),
-        Text('📏 ${_routeDistKm.toStringAsFixed(1)} km', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-      ],
-
-      // Surge warning
-      if (_surgeMultiplier > 1.0) ...[
-        const SizedBox(height: 8),
+      if (_locationSuggestions.isNotEmpty) ...[
+        const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(color: AppColors.warning.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-          child: Row(children: [
-            const Text('⚡', style: TextStyle(fontSize: 16)),
-            const SizedBox(width: 8),
-            Text('Surge ${_surgeMultiplier.toStringAsFixed(1)}x — High demand', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.warning)),
+          decoration: BoxDecoration(color: const Color(0xFF161616), borderRadius: BorderRadius.circular(14)),
+          child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _locationSuggestions.length,
+            separatorBuilder: (context, index) => const Divider(color: Color(0xFF2A2A2A), height: 1),
+            itemBuilder: (_, i) {
+              final r = _locationSuggestions[i];
+              final short = (r['display_name'] ?? '').split(',').take(3).join(',').trim();
+              return ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                leading: Icon(_isSearchingPickup ? Icons.trip_origin : Icons.location_on, color: _isSearchingPickup ? AppColors.secondary : AppColors.danger, size: 20),
+                title: Text(short, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                onTap: () {
+                  final lat = double.parse(r['lat'].toString());
+                  final lng = double.parse(r['lon'].toString());
+                  final loc = _Location(lat: lat, lng: lng, address: short);
+                  setState(() {
+                    if (_isSearchingPickup) { _pickup = loc; _pickupCtrl.text = short; } else { _dropoff = loc; _dropoffCtrl.text = short; }
+                    _locationSuggestions.clear();
+                  });
+                  _mapController.move(LatLng(lat, lng), 14);
+                  FocusScope.of(context).unfocus(); // hide keyboard
+                },
+              );
+            },
+          ),
+        ),
+      ] else ...[
+        // Distance display
+        if (_pickup != null && _dropoff != null) ...[
+          const SizedBox(height: 8),
+          Text('📏 ${_routeDistKm.toStringAsFixed(1)} km', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+        ],
+
+        // Surge warning
+        if (_surgeMultiplier > 1.0) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(color: AppColors.warning.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+            child: Row(children: [
+              const Text('⚡', style: TextStyle(fontSize: 16)),
+              const SizedBox(width: 8),
+              Text('Surge ${_surgeMultiplier.toStringAsFixed(1)}x — High demand', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.warning)),
+            ]),
+          ),
+        ],
+
+        const SizedBox(height: 16),
+
+        // Ride type selector
+        const Text('CHOOSE A RIDE', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary, letterSpacing: 0.5)),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 125,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            separatorBuilder: (context, index) => const SizedBox(width: 10),
+            itemCount: _rideTypes.length,
+            itemBuilder: (_, i) {
+              final t = _rideTypes[i];
+              final isSelected = t.id == _selectedType;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedType = t.id),
+                child: Container(
+                  width: 110, padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFF1A1A1A) : AppColors.bgCard,
+                    border: Border.all(color: isSelected ? AppColors.borderActive : AppColors.border, width: 2),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Text(t.icon, style: const TextStyle(fontSize: 28)),
+                    const SizedBox(height: 4),
+                    Text(t.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                    Text(t.time, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                    Text('₹${t.fare(_routeDistKm, _surgeMultiplier)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.secondary)),
+                  ]),
+                ),
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Payment method
+        Row(children: [
+          _payChip('💵', 'Cash', 'cash'),
+          const SizedBox(width: 10),
+          _payChip('📲', 'UPI', 'upi'),
+          const SizedBox(width: 10),
+          _payChip('💳', 'Wallet', 'wallet'),
+        ]),
+
+        const SizedBox(height: 16),
+
+        // Fare + book
+        UcabCard(
+          padding: const EdgeInsets.all(14), backgroundColor: const Color(0xFF161616), borderColor: const Color(0xFF2A2A2A),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Estimated Fare', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              const SizedBox(height: 4),
+              Text('₹$fare', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+            ]),
+            ElevatedButton(
+              onPressed: _requestRide,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent, foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+              ),
+              child: const Text('Book Now'),
+            ),
           ]),
         ),
       ],
-
-      const SizedBox(height: 16),
-
-      // Ride type selector
-      const Text('CHOOSE A RIDE', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary, letterSpacing: 0.5)),
-      const SizedBox(height: 12),
-      SizedBox(
-        height: 100,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          separatorBuilder: (context, index) => const SizedBox(width: 10),
-          itemCount: _rideTypes.length,
-          itemBuilder: (_, i) {
-            final t = _rideTypes[i];
-            final isSelected = t.id == _selectedType;
-            return GestureDetector(
-              onTap: () => setState(() => _selectedType = t.id),
-              child: Container(
-                width: 110, padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFF1A1A1A) : AppColors.bgCard,
-                  border: Border.all(color: isSelected ? AppColors.borderActive : AppColors.border, width: 2),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text(t.icon, style: const TextStyle(fontSize: 28)),
-                  const SizedBox(height: 4),
-                  Text(t.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                  Text(t.time, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                  Text('₹${t.fare(_routeDistKm, _surgeMultiplier)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.secondary)),
-                ]),
-              ),
-            );
-          },
-        ),
-      ),
-
-      const SizedBox(height: 16),
-
-      // Payment method
-      Row(children: [
-        _payChip('💵', 'Cash', 'cash'),
-        const SizedBox(width: 10),
-        _payChip('📲', 'UPI', 'upi'),
-        const SizedBox(width: 10),
-        _payChip('💳', 'Wallet', 'wallet'),
-      ]),
-
-      const SizedBox(height: 16),
-
-      // Fare + book
-      UcabCard(
-        padding: const EdgeInsets.all(14), backgroundColor: const Color(0xFF161616), borderColor: const Color(0xFF2A2A2A),
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Estimated Fare', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-            const SizedBox(height: 4),
-            Text('₹$fare', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
-          ]),
-          ElevatedButton(
-            onPressed: _requestRide,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent, foregroundColor: AppColors.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-            ),
-            child: const Text('Book Now'),
-          ),
-        ]),
-      ),
     ];
   }
 
@@ -838,11 +852,33 @@ class _UserPageState extends ConsumerState<UserPage> {
             hintStyle: const TextStyle(color: AppColors.textTertiary),
             border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none,
             filled: false, contentPadding: const EdgeInsets.symmetric(vertical: 14),
+            suffixIcon: ctrl.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear, color: AppColors.textSecondary, size: 18),
+                    onPressed: () {
+                      ctrl.clear();
+                      setState(() {
+                        if (isPickup) {
+                          _pickup = null;
+                        } else {
+                          _dropoff = null;
+                        }
+                        _locationSuggestions.clear();
+                      });
+                    },
+                  )
+                : null,
           ),
+          onChanged: (v) {
+            _searchDebounce?.cancel();
+            _searchDebounce = Timer(const Duration(milliseconds: 600), () {
+              _searchLocation(v, isPickup);
+            });
+            setState(() {}); // to show/hide clear icon
+          },
           onSubmitted: (v) => _searchLocation(v, isPickup),
         ),
       ),
-      IconButton(icon: const Icon(Icons.search, color: AppColors.textSecondary, size: 20), onPressed: () => _searchLocation(ctrl.text, isPickup)),
     ]);
   }
 

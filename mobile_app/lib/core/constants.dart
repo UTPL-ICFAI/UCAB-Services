@@ -4,8 +4,11 @@ library;
 class ApiConstants {
   ApiConstants._();
 
-  /// Backend URL — Render-hosted production server
-  static const String baseUrl = 'https://ucab-services.onrender.com';
+  /// Backend URL — Render-hosted production server (commented out for local testing)
+  // static const String baseUrl = 'https://ucab-services.onrender.com';
+  
+  /// Backend URL — Local network development server
+  static const String baseUrl = 'http://192.168.0.113:5000';
 
   // ── Auth ────────────────────────────────────────────────────
   static const String userLogin = '/api/auth/user/login';
